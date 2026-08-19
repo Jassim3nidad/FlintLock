@@ -1,3 +1,4 @@
+export { Buffer } from './native';
 export * from './types';
 export * from './csprng';
 export * from './kdf';

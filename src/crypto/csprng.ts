@@ -42,3 +42,18 @@ export function randomInt(exclusiveMax: number): number {
   }
   /* eslint-enable no-bitwise */
 }
+
+/**
+ * RFC 4122 v4 UUID from CSPRNG bytes (not Math.random(), unlike many
+ * userland uuid-v4 implementations). Used for vault and record IDs —
+ * these aren't secret, just unique, but still shouldn't be guessable.
+ */
+export function randomUUID(): string {
+  const bytes = randomBytes(16);
+  // eslint-disable-next-line no-bitwise -- set the version (4) and variant (10) bits per RFC 4122
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  // eslint-disable-next-line no-bitwise
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
