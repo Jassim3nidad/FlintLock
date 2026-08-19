@@ -1,0 +1,81 @@
+# Crypto core
+
+This document covers the key hierarchy, parameter choices and their rationale, and the upgrade path. The implementation lives in [`src/crypto/`](../src/crypto).
+
+## Library
+
+[`react-native-quick-crypto`](https://github.com/margelo/react-native-quick-crypto) — JSI bindings over native OpenSSL/BoringSSL (statically linked, OpenSSL 3.6.2 on Android at the time of writing). Not a pure-JS polyfill: PBKDF2, AES-256-GCM, CSPRNG, and Argon2 all execute in native code.
+
+Every module in `src/crypto` imports the binding through [`native.ts`](../src/crypto/native.ts) rather than importing `react-native-quick-crypto` directly. That's the one seam Jest substitutes with a Node-`crypto`-backed test double ([`__mocks__/native.ts`](../src/crypto/__mocks__/native.ts)) — see the KDF vectors section below for why that matters and what it does and doesn't prove.
+
+## Key hierarchy (envelope encryption)
+
+```
+master password ──PBKDF2 or Argon2id──► KEK (256-bit)
+                                            │
+random 256-bit DEK ─────────────────────────┴──AES-256-GCM wrap──► wrapped DEK blob (in vault header)
+        │
+        └── AES-256-GCM encrypts every vault record, one fresh IV per record
+```
+
+- **KEK (Key Encryption Key):** derived from the master password + a per-vault salt + KDF params. Never stored. Re-derived on every unlock.
+- **DEK (Data Encryption Key):** a random 256-bit key, generated once via CSPRNG (`generateDek()` in [`envelope.ts`](../src/crypto/envelope.ts)), never derived from the password. Wrapped (AES-256-GCM-encrypted) under the KEK and stored in the vault header. Unwrapped into memory on unlock, used to encrypt/decrypt every record.
+
+Splitting KEK and DEK is what makes password changes and KDF-parameter upgrades cheap: only the small wrapped-DEK blob gets re-wrapped, not every record in the vault.
+
+## Parameters
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| KDF | PBKDF2-HMAC-SHA256 | OWASP-floor default; see the Argon2id section below for the proposed alternative |
+| PBKDF2 iterations | 310,000 | OWASP 2023 recommended minimum for PBKDF2-HMAC-SHA256 |
+| KDF salt | 32 random bytes, CSPRNG | Exceeds the 16-byte NIST SP 800-132 floor |
+| DEK / KEK size | 256-bit | AES-256 |
+| Cipher | AES-256-GCM | Authenticated encryption; industry standard, hardware-accelerated on both platforms |
+| GCM IV | 96-bit (12 bytes), fresh CSPRNG per encryption | NIST SP 800-38D recommended IV length; a fresh random IV per encryption keeps reuse-under-a-key probability negligible at any realistic vault size |
+| GCM auth tag | 128-bit, always verified | Full-strength tag; never truncated |
+
+Randomness for all of the above (salts, DEK, IVs) comes from `randomBytes()` in [`csprng.ts`](../src/crypto/csprng.ts), which wraps the native CSPRNG. `Math.random()` is never used anywhere in the crypto path.
+
+## Master password verification
+
+There is no stored password hash anywhere in this app. Verification *is* attempting to unwrap the DEK: the correct password derives the KEK that unwraps it, and GCM's authentication tag either succeeds or fails. A wrong password produces a KEK that fails the tag check, which surfaces as the same `DecryptionError` as a corrupted or tampered blob — see `unwrapDek()` in [`envelope.ts`](../src/crypto/envelope.ts). This is deliberate: one less secret at rest, one less place to get the comparison wrong.
+
+## AAD binding
+
+Every AES-256-GCM operation in this app passes additional authenticated data (AAD):
+
+- **Records** are bound to their record ID and schema version (`recordAad()` in [`cipher.ts`](../src/crypto/cipher.ts)), so a ciphertext can't be swapped between records or replayed against a different schema version. The encoding is length-prefixed (4-byte record-ID length, 4-byte schema version, then the ID bytes) rather than a delimited string like `${id}:${version}` — a delimited join is ambiguous (`id="a:1", version=2` and `id="a", version="1:2"` collide), and 3-line KAT-style tests exist for exactly this case.
+- **The wrapped DEK** is bound to the vault ID and the KDF-params version (`dekWrapAad()` in [`envelope.ts`](../src/crypto/envelope.ts)), so a wrapped DEK can't be moved to a different vault header or paired with stale KDF params.
+
+## KDF-parameter upgrade path
+
+The vault header stores the KDF algorithm, its parameters, and the salt, specifically so those can be strengthened later without re-encrypting the vault. `upgradeKdfParams()` in [`envelope.ts`](../src/crypto/envelope.ts) implements this now, even though nothing calls it yet:
+
+1. Re-derive the old KEK from the master password + old params, unwrap the DEK (this also re-verifies the password).
+2. Generate a fresh salt, derive a new KEK under the new params.
+3. Re-wrap the *same* DEK under the new KEK.
+4. Return the new wrapped DEK + params + salt for the caller to persist.
+
+Vault records are untouched — only the small envelope around the DEK changes. This is also how switching KDF algorithm (PBKDF2 → Argon2id) would work, not just raising iteration counts.
+
+## Recommendation: Argon2id as an opt-in alternative to PBKDF2
+
+PBKDF2-HMAC-SHA256 at 310k iterations meets the spec I was given and the OWASP floor, but it is not memory-hard — GPUs and ASICs parallelize it far more cheaply than they can Argon2id. `react-native-quick-crypto` has a **native** Argon2id binding (OpenSSL 3.2+'s Argon2 provider, gated behind `OPENSSL_VERSION_NUMBER >= 0x30200000L` in the library's C++), so this isn't a pure-JS fallback — the audited-native-only bar the project spec sets is met.
+
+I've implemented it — `deriveKek()` in [`kdf.ts`](../src/crypto/kdf.ts) supports `kdf: 'argon2id'` in the header format already — but **PBKDF2 stays the default for new vaults**, per the instruction to propose this rather than silently switch defaults. If you want Argon2id as the default going forward:
+
+- Suggested starting params: memory 19,456 KiB (19 MiB), 2 passes, parallelism 1 — OWASP's current password-hashing recommendation for Argon2id. These are cheap to raise later via the same upgrade path.
+- Existing PBKDF2 vaults are unaffected either way; the header format already carries the KDF choice per-vault.
+
+## Testing
+
+- **PBKDF2:** known-answer tests against the two official RFC 7914 §11 vectors. Fetched directly from `rfc-editor.org` and parsed programmatically — not hand-transcribed, and not taken from a summarized fetch (see the fixture file's header comment for why that distinction mattered in practice: an early hand-copy from a summarized fetch introduced a transcription error that a live independent computation caught).
+- **AES-256-GCM:** a known-answer vector sourced from the Go standard library's NIST-CAVP-derived `aesGCMTests` table, parsed programmatically from the raw source file and cross-checked byte-for-byte against the written fixture.
+- **IV uniqueness:** 5,000 encryptions under one key, asserting no repeated IV.
+- **Fail-closed behavior:** flipped ciphertext byte, flipped auth-tag byte, wrong AAD, wrong key, wrong master password — all assert `DecryptionError`, never partial plaintext.
+- **Argon2id:** exercised through `hash-wasm`'s WASM implementation in the test double (structural/round-trip only — see `__mocks__/native.ts`). This validates our parameter marshalling but **not** react-native-quick-crypto's native Argon2id binding, and is **not** verified against RFC 9106's official Argon2id test vectors. That requires an on-device or simulator run, which is unverified as of this writing (see the phase report).
+
+## What this doesn't cover yet
+
+Biometric unlock, storage layer, `.flbx` export format, and Web Bridge each have their own key material and are documented separately as they're built.
