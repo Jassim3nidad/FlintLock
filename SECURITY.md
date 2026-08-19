@@ -4,7 +4,7 @@ This document is written incrementally as Flintlock is built — it covers what 
 
 ## What Flintlock protects against
 
-- **A stolen or lost device, screen locked, app closed.** Vault contents are encrypted at rest under a key that only exists after a correct master password (or biometric-released hardware key, once built) unwraps it.
+- **A stolen or lost device, screen locked, app closed.** Vault contents are encrypted at rest under a key that only exists after a correct master password — or, if enabled, a biometric-released hardware key — unwraps it. The vault also auto-locks (idle timer, always; on app backgrounding, configurably; on device lock, always — see `src/unlock/session.ts`), wiping the DEK from memory each time.
 - **A vault file copied off the device.** Without the master password, the wrapped DEK cannot be unwrapped and the vault contents cannot be decrypted or tampered with undetected — every ciphertext is AES-256-GCM-authenticated.
 - **Network-based attacks in general.** There is no backend and no account. Nothing about the vault is transmitted anywhere except the explicit, user-initiated Web Bridge transfer and export flows (not yet built), which will get their own threat model documents before implementation.
 - **Silent tampering or corruption.** Every decryption path fails closed: a bad auth tag, wrong AAD, or wrong key all produce the same hard error and never a partial or best-effort plaintext result. See `DecryptionError` in [`src/crypto/types.ts`](src/crypto/types.ts).
@@ -24,9 +24,15 @@ Stated plainly, per the project's own instruction that overclaiming is worse tha
 
 The spec calls for zeroing key material and decrypted plaintext buffers after use wherever the language allows it, and for documenting the limitation honestly where it doesn't. Concretely, as implemented today:
 
-- **Buffers are zeroed where we control the lifetime.** `envelope.ts`'s `upgradeKdfParams()` calls `.fill(0)` on the old KEK, new KEK, and DEK in `finally` blocks once they're no longer needed. The same pattern will extend to the unlock/lock flow once it's built (Phase 3).
+- **Buffers are zeroed where we control the lifetime.** `envelope.ts`'s `upgradeKdfParams()` calls `.fill(0)` on the old KEK, new KEK, and DEK in `finally` blocks once they're no longer needed. `VaultStore.lock()` and every path through `UnlockSession.lock()` (idle timeout, backgrounding, device lock, manual) do the same to the DEK.
 - **JavaScript strings are immutable and cannot be zeroed.** If a master password ever passes through a JS `string` (rather than a `Buffer`) at any point — a text input's value, a function argument typed as `string` — that string's backing memory is not reachable for overwriting and persists until the garbage collector happens to reclaim it, on its own schedule, with no guarantee about *when* or whether the memory is overwritten before reuse. This is a real, unfixable limitation of the runtime, not an oversight: `src/crypto`'s functions all take `Buffer`, never `string`, for exactly this reason, but the UI layer that reads the password out of a text field will still touch a JS string at least once before it can be converted. That gap is inherent to building this app in JavaScript/React Native rather than a language with manual memory control, and no amount of `.fill(0)` elsewhere closes it.
 - **Native crypto operations happen in C++ (OpenSSL), outside the JS heap**, for the duration of the actual PBKDF2/Argon2id/AES-GCM computation — but the buffers marshalled across the JSI boundary are still JS-heap-allocated `Buffer` objects on the way in and out.
+
+## Biometric unlock
+
+Biometric unlock (`src/biometric/biometricVault.ts`) delegates the actual hardware-backed key generation, wrapping, and biometric gating to [`react-native-keychain`](https://github.com/oblador/react-native-keychain) — configured with `ACCESS_CONTROL.BIOMETRY_CURRENT_SET` (invalidates on any new biometric enrollment) and, on Android, `STORAGE_TYPE.AES_GCM` (requires authentication for both wrap and unwrap) at `SECURITY_LEVEL.SECURE_HARDWARE`. Flintlock does not implement its own Keystore/Secure Enclave key generation — it stores a copy of the DEK through this library rather than manually managing a second native key itself. The master password remains the only recovery path; disabling or losing biometric enrollment never locks a vault permanently, it just falls back to the password.
+
+**Unverified as of this writing:** the logic in `biometricVault.ts` (which options get passed, how a declined/failed prompt is distinguished from a genuine error, service naming) is tested against a controllable fake — see `src/biometric/__mocks__/native.ts`'s own header comment. Whether `react-native-keychain`'s native code actually produces a hardware-backed, biometric-invalidating key on a real device requires an on-device or simulator run with real biometric enrollment, which hasn't been possible yet (see the phase report for why).
 
 ## Reporting
 

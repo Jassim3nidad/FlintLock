@@ -76,12 +76,21 @@ export interface VaultSettings {
   autoLock: 'immediate' | '30s' | '1m' | '5m' | '15m' | '30m' | 'never';
   lockOnBackground: boolean;
   clipboardClearSeconds: number;
+  /**
+   * Whether a biometric-gated hardware key currently exists for this
+   * vault (see src/biometric). Tracked here, rather than inferred by
+   * probing the OS keychain, so checking it never itself triggers a
+   * biometric prompt. The master password remains the only recovery
+   * path regardless of this setting.
+   */
+  biometricUnlockEnabled: boolean;
 }
 
 export const DEFAULT_VAULT_SETTINGS: VaultSettings = {
   autoLock: '1m',
   lockOnBackground: true,
   clipboardClearSeconds: 30,
+  biometricUnlockEnabled: false,
 };
 
 /**

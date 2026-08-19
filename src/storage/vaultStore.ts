@@ -166,6 +166,31 @@ export class VaultStore {
     return new VaultStore(header, dek);
   }
 
+  /**
+   * Opens the vault with an already-known DEK, bypassing password
+   * derivation entirely. For the biometric-unlock path: the DEK comes
+   * back from the OS keychain only after a successful hardware-gated
+   * biometric check (see src/biometric), which already provides its own
+   * authenticated-encryption guarantee on that value — there is nothing
+   * meaningful left for this layer to re-verify.
+   */
+  static openWithDek(dek: Buffer): VaultStore {
+    const header = readHeader();
+    if (!header) {
+      throw new Error('No vault exists on this device');
+    }
+    return new VaultStore(header, dek);
+  }
+
+  get settings() {
+    return this.header.settings;
+  }
+
+  updateSettings(settings: Partial<VaultHeader['settings']>): void {
+    this.header = { ...this.header, settings: { ...this.header.settings, ...settings } };
+    writeHeader(this.header);
+  }
+
   /** Wipes the DEK from memory. All record access throws until re-opened. */
   lock(): void {
     if (this.dek) {
