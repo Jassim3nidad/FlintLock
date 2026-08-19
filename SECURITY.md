@@ -9,6 +9,12 @@ This document is written incrementally as Flintlock is built — it covers what 
 - **Network-based attacks in general.** There is no backend and no account. Nothing about the vault is transmitted anywhere except the explicit, user-initiated Web Bridge transfer and export flows (not yet built), which will get their own threat model documents before implementation.
 - **Silent tampering or corruption.** Every decryption path fails closed: a bad auth tag, wrong AAD, or wrong key all produce the same hard error and never a partial or best-effort plaintext result. See `DecryptionError` in [`src/crypto/types.ts`](src/crypto/types.ts).
 
+## TOTP/HOTP secret storage and clock drift
+
+TOTP/HOTP shared secrets (`src/storage/schema.ts`'s `TotpEntry.secret`) are vault records like any other — AES-256-GCM-encrypted with the same DEK, AAD-bound to their record id, subject to the same fail-closed decryption as credentials. There is no separate key or weaker path for authenticator secrets.
+
+`src/totp/clockDrift.ts`'s drift warning only detects **sudden, large** jumps in the device's wall clock (comparing it against real elapsed time between two timer ticks) — it cannot detect small, gradual clock skew, which would need a trusted external time source (NTP), and fetching one is a network call this app doesn't make. If the UI ever surfaces this warning, its copy should say the clock looks off, not that it's the reason a code is wrong — the monitor genuinely can't tell the difference between "wrong because of drift" and "wrong for some other reason."
+
 ## What Flintlock does not protect against
 
 Stated plainly, per the project's own instruction that overclaiming is worse than a missing feature:

@@ -31,6 +31,7 @@ const QuickCrypto = {
 
   createCipheriv: nodeCrypto.createCipheriv,
   createDecipheriv: nodeCrypto.createDecipheriv,
+  createHmac: nodeCrypto.createHmac,
 
   argon2: (
     algorithm: string,
