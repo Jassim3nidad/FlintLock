@@ -35,6 +35,14 @@ export interface Credential {
   passwordHistory: PasswordHistoryEntry[];
   createdAt: number;
   updatedAt: number;
+  /**
+   * When the *current* password became current — distinct from
+   * updatedAt, which also bumps on non-password edits (title, tags,
+   * ...). Needed for accurate password-age detection (security
+   * dashboard); reconstructing it from passwordHistory alone breaks as
+   * soon as a non-password edit happens between two password changes.
+   */
+  passwordUpdatedAt: number;
   lastUsedAt: number | null;
   /** Soft-delete timestamp; null while active. Hard delete removes the record entirely. */
   deletedAt: number | null;

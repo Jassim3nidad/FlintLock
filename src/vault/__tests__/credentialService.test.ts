@@ -75,6 +75,24 @@ describe('updateCredential', () => {
     expect(updated.updatedAt).toBeGreaterThanOrEqual(created.updatedAt);
   });
 
+  it('a non-password edit does not change passwordUpdatedAt (password age tracking survives unrelated edits)', async () => {
+    const session = await newSession();
+    const created = createCredential(session, NEW_CREDENTIAL_INPUT);
+    const afterPasswordChange = updateCredential(session, created.id, { password: 'new-password' });
+
+    const afterTitleEdit = updateCredential(session, created.id, { title: 'Renamed only' });
+    expect(afterTitleEdit.passwordUpdatedAt).toBe(afterPasswordChange.passwordUpdatedAt);
+    expect(afterTitleEdit.updatedAt).toBeGreaterThanOrEqual(afterPasswordChange.updatedAt);
+
+    // And a *subsequent* password change's history entry is timestamped
+    // with when it actually happened, not with the intervening title
+    // edit's updatedAt.
+    const afterSecondPasswordChange = updateCredential(session, created.id, { password: 'newer-password' });
+    const lastHistoryEntry = afterSecondPasswordChange.passwordHistory.at(-1)!;
+    expect(lastHistoryEntry.password).toBe('new-password');
+    expect(lastHistoryEntry.changedAt).toBe(afterSecondPasswordChange.passwordUpdatedAt);
+  });
+
   it('pushes the previous password onto history only when the password actually changes', async () => {
     const session = await newSession();
     const created = createCredential(session, NEW_CREDENTIAL_INPUT);

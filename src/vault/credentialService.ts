@@ -26,6 +26,7 @@ export function createCredential(session: UnlockSession, input: NewCredentialInp
     recordType: 'credential',
     createdAt: now,
     updatedAt: now,
+    passwordUpdatedAt: now,
     lastUsedAt: null,
     deletedAt: null,
     passwordHistory: [],
@@ -42,19 +43,23 @@ export function getCredential(session: UnlockSession, id: string): Credential | 
 
 /**
  * Applying a password change pushes the *previous* password onto
- * passwordHistory, timestamped with when it stopped being current (its
- * own last updatedAt), not with now.
+ * passwordHistory (timestamped with when it stopped being current — now,
+ * not existing.updatedAt, which may reflect an unrelated later edit) and
+ * bumps passwordUpdatedAt so password-age tracking (security dashboard)
+ * stays accurate even across intervening non-password edits.
  */
 export function updateCredential(session: UnlockSession, id: string, changes: CredentialUpdate): Credential {
   const existing = getCredentialOrThrow(session, id);
   const passwordChanged = changes.password !== undefined && changes.password !== existing.password;
+  const now = Date.now();
 
   const updated: Credential = {
     ...existing,
     ...changes,
-    updatedAt: Date.now(),
+    updatedAt: now,
+    passwordUpdatedAt: passwordChanged ? now : existing.passwordUpdatedAt,
     passwordHistory: passwordChanged
-      ? [...existing.passwordHistory, { password: existing.password, changedAt: existing.updatedAt }]
+      ? [...existing.passwordHistory, { password: existing.password, changedAt: now }]
       : existing.passwordHistory,
   };
   session.vault.putRecord(updated);

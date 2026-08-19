@@ -26,6 +26,7 @@ function makeCredential(overrides: Partial<Credential> = {}): Credential {
     passwordHistory: [],
     createdAt: now,
     updatedAt: now,
+    passwordUpdatedAt: now,
     lastUsedAt: null,
     deletedAt: null,
     ...overrides,
