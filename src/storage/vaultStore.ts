@@ -186,6 +186,10 @@ export class VaultStore {
     return this.header.settings;
   }
 
+  get vaultId(): string {
+    return this.header.vaultId;
+  }
+
   updateSettings(settings: Partial<VaultHeader['settings']>): void {
     this.header = { ...this.header, settings: { ...this.header.settings, ...settings } };
     writeHeader(this.header);
