@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { TextField } from '../components/TextField';
 import { Button } from '../components/Button';
+import { TagPicker } from '../components/TagPicker';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
 import { createCredential, getCredential, updateCredential } from '../vault/credentialService';
 import { generatePassword } from '../generator/passwordGenerator';
+import { CustomField, CustomFieldType } from '../storage/schema';
 import type { MainStackParamList } from '../navigation/types';
 
 type Route = NativeStackScreenProps<MainStackParamList, 'CredentialForm'>['route'];
@@ -30,8 +32,29 @@ export function CredentialFormScreen() {
   const [url, setUrl] = useState(existing?.urls[0] ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [favorite, setFavorite] = useState(existing?.favorite ?? false);
+  const [tagIds, setTagIds] = useState<string[]>(existing?.tagIds ?? []);
+  const [customFields, setCustomFields] = useState<CustomField[]>(existing?.customFields ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const addCustomField = (): void => {
+    setCustomFields((fields) => [...fields, { key: '', value: '', type: 'text' }]);
+  };
+  const updateCustomField = (index: number, patch: Partial<CustomField>): void => {
+    setCustomFields((fields) => fields.map((f, i) => (i === index ? { ...f, ...patch } : f)));
+  };
+  const removeCustomField = (index: number): void => {
+    setCustomFields((fields) => fields.filter((_, i) => i !== index));
+  };
+  const moveCustomField = (index: number, direction: -1 | 1): void => {
+    setCustomFields((fields) => {
+      const target = index + direction;
+      if (target < 0 || target >= fields.length) return fields;
+      const next = [...fields];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next;
+    });
+  };
 
   const handleGenerate = (): void => {
     setPassword(generatePassword(GENERATOR_DEFAULTS).value);
@@ -52,11 +75,13 @@ export function CredentialFormScreen() {
         urls: url ? [url] : [],
         notes,
         favorite,
+        tagIds,
+        customFields: customFields.filter((f) => f.key.trim().length > 0),
       };
       if (existing) {
         updateCredential(session, existing.id, fields);
       } else {
-        createCredential(session, { ...fields, tagIds: [], customFields: [] });
+        createCredential(session, fields);
       }
       navigation.goBack();
     } catch (e) {
@@ -87,6 +112,62 @@ export function CredentialFormScreen() {
         <Switch testID="favorite-switch" value={favorite} onValueChange={setFavorite} />
       </View>
 
+      <TagPicker selectedTagIds={tagIds} onChange={setTagIds} />
+
+      <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>Custom fields</Text>
+      {customFields.map((field, index) => (
+        <View key={index} testID={`custom-field-${index}`} style={[styles.customFieldRow, { borderColor: theme.colors.divider }]}>
+          <TextField
+            label="Field name"
+            testID={`custom-field-key-${index}`}
+            value={field.key}
+            onChangeText={(v) => updateCustomField(index, { key: v })}
+          />
+          <TextField
+            label="Value"
+            testID={`custom-field-value-${index}`}
+            isPassword={field.type === 'hidden'}
+            value={field.value}
+            onChangeText={(v) => updateCustomField(index, { value: v })}
+          />
+          <View style={styles.customFieldTypeRow}>
+            {(['text', 'hidden', 'url', 'number', 'date'] as CustomFieldType[]).map((type) => {
+              const isSelected = field.type === type;
+              return (
+                <Pressable
+                  key={type}
+                  testID={`custom-field-type-${index}-${type}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => updateCustomField(index, { type })}
+                  style={[
+                    styles.typeChip,
+                    { backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface, borderRadius: theme.radius.pill },
+                  ]}
+                >
+                  <Text style={[styles.typeChipLabel, { color: isSelected ? theme.colors.onPrimary : theme.colors.textPrimary }]}>
+                    {type}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={styles.customFieldActions}>
+            <Pressable testID={`custom-field-up-${index}`} accessibilityRole="button" onPress={() => moveCustomField(index, -1)} hitSlop={8}>
+              <Text style={{ color: theme.colors.primary }}>Up</Text>
+            </Pressable>
+            <Pressable testID={`custom-field-down-${index}`} accessibilityRole="button" onPress={() => moveCustomField(index, 1)} hitSlop={8}>
+              <Text style={{ color: theme.colors.primary }}>Down</Text>
+            </Pressable>
+            <Pressable testID={`custom-field-remove-${index}`} accessibilityRole="button" onPress={() => removeCustomField(index)} hitSlop={8}>
+              <Text style={{ color: theme.colors.danger }}>Remove</Text>
+            </Pressable>
+          </View>
+        </View>
+      ))}
+      <Button label="Add custom field" onPress={addCustomField} variant="secondary" testID="add-custom-field-button" />
+
+      <View style={styles.spacer} />
       {error && (
         <Text testID="form-error" style={[styles.error, { color: theme.colors.danger }]}>
           {error}
@@ -102,5 +183,11 @@ const styles = StyleSheet.create({
   title: { fontWeight: '700', marginBottom: 24 },
   spacer: { height: 8 },
   favoriteRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 8 },
+  customFieldRow: { borderWidth: 1, borderRadius: 8, padding: 12, marginBottom: 12 },
+  customFieldTypeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  typeChip: { paddingVertical: 4, paddingHorizontal: 10 },
+  typeChipLabel: { fontSize: 12 },
+  customFieldActions: { flexDirection: 'row', gap: 16 },
   error: { marginBottom: 16 },
 });

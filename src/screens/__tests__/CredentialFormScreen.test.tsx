@@ -102,6 +102,66 @@ describe('CredentialFormScreen — create', () => {
     await fireEvent.press(screen.getByTestId('generate-password-button'));
     expect(screen.getByTestId('password-input').props.value.length).toBeGreaterThan(0);
   });
+
+  it('creates a tag inline and saves it on the credential', async () => {
+    await renderForm();
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Example');
+    await fireEvent.changeText(screen.getByTestId('tag-input'), 'Work');
+    await fireEvent.press(screen.getByTestId('create-tag-button'));
+    await fireEvent.press(screen.getByTestId('save-button'));
+
+    await waitFor(() => {
+      const stored = vaultStorage.getAllKeys().filter((k) => k.startsWith('vault:record:'));
+      // one credential record + one tag record
+      expect(stored.length).toBe(2);
+    });
+  });
+
+  it('adds and removes custom fields', async () => {
+    await renderForm();
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Example');
+    await fireEvent.press(screen.getByTestId('add-custom-field-button'));
+    expect(screen.getByTestId('custom-field-0')).toBeTruthy();
+
+    await fireEvent.changeText(screen.getByTestId('custom-field-key-0'), 'PIN');
+    await fireEvent.changeText(screen.getByTestId('custom-field-value-0'), '1234');
+    await fireEvent.press(screen.getByTestId('custom-field-type-0-hidden'));
+
+    await fireEvent.press(screen.getByTestId('save-button'));
+
+    await waitFor(() => {
+      const stored = vaultStorage.getAllKeys().filter((k) => k.startsWith('vault:record:'));
+      expect(stored.length).toBe(1);
+    });
+  });
+
+  it('reorders custom fields with up/down and drops blank ones on save', async () => {
+    await renderForm();
+
+    await fireEvent.changeText(screen.getByTestId('title-input'), 'Example');
+    await fireEvent.press(screen.getByTestId('add-custom-field-button'));
+    await fireEvent.changeText(screen.getByTestId('custom-field-key-0'), 'First');
+    await fireEvent.press(screen.getByTestId('add-custom-field-button'));
+    await fireEvent.changeText(screen.getByTestId('custom-field-key-1'), 'Second');
+
+    await fireEvent.press(screen.getByTestId('custom-field-down-0'));
+    expect(screen.getByTestId('custom-field-key-0').props.value).toBe('Second');
+    expect(screen.getByTestId('custom-field-key-1').props.value).toBe('First');
+
+    await fireEvent.press(screen.getByTestId('custom-field-remove-1'));
+    expect(screen.queryByTestId('custom-field-1')).toBeNull();
+
+    await fireEvent.press(screen.getByTestId('add-custom-field-button'));
+    // second field left blank — should be dropped on save
+    await fireEvent.press(screen.getByTestId('save-button'));
+
+    await waitFor(() => {
+      const stored = vaultStorage.getAllKeys().filter((k) => k.startsWith('vault:record:'));
+      expect(stored.length).toBe(1);
+    });
+  });
 });
 
 describe('CredentialFormScreen — edit', () => {
