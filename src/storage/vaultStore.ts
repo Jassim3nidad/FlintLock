@@ -160,6 +160,29 @@ export class VaultStore {
       throw new Error('No vault exists on this device');
     }
 
+    const dek = await VaultStore.unwrapDekWithPassword(header, masterPassword);
+
+    return new VaultStore(header, dek);
+  }
+
+  /**
+   * Re-verifies the master password and returns the DEK directly,
+   * without constructing a VaultStore. For flows that need the DEK
+   * itself but not a whole session — specifically, enrolling biometric
+   * unlock while already unlocked: the spec requires re-entering the
+   * master password at enrollment time even though the session is
+   * already authenticated, and the biometric key wraps the same DEK the
+   * password path would unwrap. Same fail-closed guarantee as open().
+   */
+  static async verifyPasswordAndGetDek(masterPassword: Buffer): Promise<Buffer> {
+    const header = readHeader();
+    if (!header) {
+      throw new Error('No vault exists on this device');
+    }
+    return VaultStore.unwrapDekWithPassword(header, masterPassword);
+  }
+
+  private static async unwrapDekWithPassword(header: VaultHeader, masterPassword: Buffer): Promise<Buffer> {
     const salt = Buffer.from(header.salt, 'base64');
     const kek = await deriveKek(masterPassword, header.kdf, salt);
     const wrapped: WrappedKey = {
@@ -168,14 +191,11 @@ export class VaultStore {
       authTag: Buffer.from(header.wrappedDek.authTag, 'base64'),
     };
 
-    let dek: Buffer;
     try {
-      dek = unwrapDek(wrapped, kek, dekWrapAad(header.vaultId, header.kdfParamsVersion));
+      return unwrapDek(wrapped, kek, dekWrapAad(header.vaultId, header.kdfParamsVersion));
     } finally {
       kek.fill(0);
     }
-
-    return new VaultStore(header, dek);
   }
 
   /**

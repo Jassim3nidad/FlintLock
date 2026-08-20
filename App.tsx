@@ -1,45 +1,46 @@
 /**
- * Sample React Native App
- * https://github.com/facebook/react-native
+ * Flintlock — offline-first password manager and 2FA authenticator.
  *
  * @format
  */
 
-import { NewAppScreen } from '@react-native/new-app-screen';
-import { StatusBar, StyleSheet, useColorScheme, View } from 'react-native';
-import {
-  SafeAreaProvider,
-  useSafeAreaInsets,
-} from 'react-native-safe-area-context';
+import React from 'react';
+import { StatusBar, StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { NavigationContainer } from '@react-navigation/native';
+import { ThemeProvider, useTheme } from './src/theme/ThemeProvider';
+import { VaultSessionProvider } from './src/state/VaultSessionProvider';
+import { RootNavigator } from './src/navigation/RootNavigator';
 
-function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
+function AppContent() {
+  const theme = useTheme();
   return (
-    <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      <AppContent />
-    </SafeAreaProvider>
+    <>
+      <StatusBar barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'} />
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
+    </>
   );
 }
 
-function AppContent() {
-  const safeAreaInsets = useSafeAreaInsets();
-
+function App() {
   return (
-    <View style={styles.container}>
-      <NewAppScreen
-        templateFileName="App.tsx"
-        safeAreaInsets={safeAreaInsets}
-      />
-    </View>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <VaultSessionProvider>
+            <AppContent />
+          </VaultSessionProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  root: { flex: 1 },
 });
 
 export default App;

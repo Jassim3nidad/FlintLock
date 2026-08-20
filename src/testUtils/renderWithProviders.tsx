@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { VaultSessionProvider } from '../state/VaultSessionProvider';
 
@@ -16,4 +17,9 @@ export function withProviders(ui: React.ReactElement): React.ReactElement {
       <VaultSessionProvider>{ui}</VaultSessionProvider>
     </ThemeProvider>
   );
+}
+
+/** Same as withProviders, plus a NavigationContainer — for screens that call useNavigation()/useRoute(). */
+export function withNavigation(ui: React.ReactElement): React.ReactElement {
+  return withProviders(<NavigationContainer>{ui}</NavigationContainer>);
 }
