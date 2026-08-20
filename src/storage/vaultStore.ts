@@ -93,6 +93,18 @@ export class VaultStore {
     return vaultStorage.contains(HEADER_KEY);
   }
 
+  /**
+   * Reads the plaintext header's settings without deriving any key or
+   * unlocking anything — the header (unlike vault contents) never
+   * required a key to read in the first place. For screens that need to
+   * know something like biometricUnlockEnabled *before* the vault is
+   * open, e.g. to decide whether to show a biometric-unlock button on
+   * the lock screen.
+   */
+  static peekSettings(): VaultHeader['settings'] | undefined {
+    return readHeader()?.settings;
+  }
+
   /** Creates a brand-new, empty vault. Throws if one already exists on this device. */
   static async create(
     masterPassword: Buffer,

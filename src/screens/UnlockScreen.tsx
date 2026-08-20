@@ -1,0 +1,100 @@
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text } from 'react-native';
+import { Screen } from '../components/Screen';
+import { TextField } from '../components/TextField';
+import { Button } from '../components/Button';
+import { useTheme } from '../theme/ThemeProvider';
+import { useVaultSession } from '../state/VaultSessionProvider';
+import { Buffer, DecryptionError } from '../crypto';
+import { VaultStore } from '../storage/vaultStore';
+import { isBiometricHardwareAvailable } from '../biometric/biometricVault';
+
+export function UnlockScreen() {
+  const theme = useTheme();
+  const { unlockWithPassword, unlockWithBiometrics } = useVaultSession();
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [showBiometricButton, setShowBiometricButton] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const settings = VaultStore.peekSettings();
+      if (!settings?.biometricUnlockEnabled) return;
+      const hardwareAvailable = await isBiometricHardwareAvailable();
+      if (!cancelled) setShowBiometricButton(hardwareAvailable);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleUnlock = async (): Promise<void> => {
+    setError(null);
+    setSubmitting(true);
+    let passwordBuffer: Buffer | null = null;
+    try {
+      passwordBuffer = Buffer.from(password, 'utf8');
+      await unlockWithPassword(passwordBuffer);
+    } catch (e) {
+      setError(e instanceof DecryptionError ? 'Incorrect master password' : 'Could not unlock vault');
+    } finally {
+      passwordBuffer?.fill(0);
+      setSubmitting(false);
+      setPassword('');
+    }
+  };
+
+  const handleBiometricUnlock = async (): Promise<void> => {
+    setError(null);
+    setSubmitting(true);
+    try {
+      const succeeded = await unlockWithBiometrics();
+      if (!succeeded) setError('Biometric unlock was cancelled or failed. Use your master password instead.');
+    } catch {
+      setError('Biometric unlock failed. Use your master password instead.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Screen scroll>
+      <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.title.fontSize }]}>
+        Unlock Flintlock
+      </Text>
+
+      <TextField
+        label="Master password"
+        testID="password-input"
+        isPassword
+        value={password}
+        onChangeText={setPassword}
+        onSubmitEditing={handleUnlock}
+      />
+
+      {error && (
+        <Text testID="form-error" style={{ color: theme.colors.danger, marginBottom: theme.spacing.md }}>
+          {error}
+        </Text>
+      )}
+
+      <Button label="Unlock" onPress={handleUnlock} loading={submitting} testID="unlock-button" />
+
+      {showBiometricButton && (
+        <Button
+          label="Unlock with biometrics"
+          onPress={handleBiometricUnlock}
+          variant="secondary"
+          disabled={submitting}
+          testID="biometric-unlock-button"
+        />
+      )}
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  title: { fontWeight: '700', marginBottom: 24 },
+});
