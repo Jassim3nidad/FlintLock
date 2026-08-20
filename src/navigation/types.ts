@@ -10,4 +10,5 @@ export type MainStackParamList = {
   SecurityDashboard: undefined;
   Export: undefined;
   Import: undefined;
+  WebBridge: undefined;
 };

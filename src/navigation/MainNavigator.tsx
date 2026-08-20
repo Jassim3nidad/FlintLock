@@ -9,6 +9,7 @@ import { TagManagementScreen } from '../screens/TagManagementScreen';
 import { SecurityDashboardScreen } from '../screens/SecurityDashboardScreen';
 import { ExportScreen } from '../screens/ExportScreen';
 import { ImportScreen } from '../screens/ImportScreen';
+import { WebBridgePairingScreen } from '../screens/WebBridgePairingScreen';
 import type { MainStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -25,6 +26,7 @@ export function MainNavigator() {
       <Stack.Screen name="SecurityDashboard" component={SecurityDashboardScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Export" component={ExportScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Import" component={ImportScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="WebBridge" component={WebBridgePairingScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

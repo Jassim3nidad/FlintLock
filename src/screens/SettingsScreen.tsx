@@ -131,6 +131,8 @@ export function SettingsScreen() {
       <Button label="Export vault" onPress={() => navigation.navigate('Export')} variant="secondary" testID="export-nav-button" />
       <View style={styles.spacer} />
       <Button label="Import vault" onPress={() => navigation.navigate('Import')} variant="secondary" testID="import-nav-button" />
+      <View style={styles.spacer} />
+      <Button label="Transfer to desktop (Web Bridge)" onPress={() => navigation.navigate('WebBridge')} variant="secondary" testID="web-bridge-nav-button" />
 
       <View style={styles.spacer} />
       <Button label="Lock now" onPress={lock} variant="secondary" testID="lock-now-button" />

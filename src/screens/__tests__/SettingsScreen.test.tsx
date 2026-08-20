@@ -45,6 +45,13 @@ describe('SettingsScreen — auto-lock and background settings', () => {
     expect(screen.getByTestId('export-nav-button')).toBeTruthy();
     expect(screen.getByTestId('import-nav-button')).toBeTruthy();
   });
+
+  it('has a Web Bridge transfer button', async () => {
+    await seedVault();
+    await renderUnlockedScreen(SettingsScreen, undefined, 'lock-now-button');
+
+    expect(screen.getByTestId('web-bridge-nav-button')).toBeTruthy();
+  });
 });
 
 describe('SettingsScreen — biometric enrollment', () => {
