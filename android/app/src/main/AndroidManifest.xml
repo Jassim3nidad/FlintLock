@@ -1,5 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!--
+      Flintlock itself never makes a network call — no backend, no
+      account, no telemetry. This permission is staged for the approved
+      but not-yet-implemented Web Bridge local-transfer feature (see
+      docs/WEB_BRIDGE_THREAT_MODEL.md): Android has no permission scoped
+      to "local network only," so any local socket needs the same
+      broad INTERNET permission a WAN request would. Enforcing
+      local-only stays a code-review guarantee, not an OS one — see
+      SECURITY.md.
+    -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
