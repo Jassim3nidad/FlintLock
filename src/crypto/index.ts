@@ -5,3 +5,4 @@ export * from './kdf';
 export * from './cipher';
 export * from './envelope';
 export * from './hmac';
+export * from './hkdf';

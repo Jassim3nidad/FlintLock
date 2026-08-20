@@ -1,6 +1,6 @@
 # Web Bridge threat model
 
-**Status: proposed design, not yet implemented.** Per the project spec, this is the highest-risk feature in the app and requires explicit approval before any code is written. Nothing described here exists in `src/` yet.
+**Status: approved.** The architecture below, including a full 256-bit pairing secret for both the QR and manual-entry paths, was reviewed and approved before implementation began. See [`src/webbridge/`](../src/webbridge) for the implementation and its own notes on what is and isn't machine-verifiable without a working on-device build.
 
 ## What it is
 
@@ -25,7 +25,7 @@ The QR encodes a literal IP address, not a hostname. **No mDNS/Bonjour, no servi
 - Session key: `HKDF(pairingSecret, salt=sessionId, info="flintlock-web-bridge-v1")` → a 256-bit AES-GCM key, used by both sides for the whole session.
 - Every message either direction: AES-256-GCM, fresh random IV per message, same discipline as the rest of the app's crypto (`src/crypto/cipher.ts`).
 - **No PAKE, no asymmetric handshake beyond this.** The security property this leans on: an attacker who can observe or even actively intercept every packet on the LAN still cannot derive the session key without the pairing secret, and cannot forge a validly-authenticated message without it either (GCM auth tag fails deterministically). The very first message the desktop page sends must already be correctly encrypted under the derived key — if it isn't, the phone drops the connection without responding (never confirms or denies *why* it failed, to avoid a probing oracle).
-- Open question for review: the manual-entry fallback needs the secret encodable as human-typeable text. A 256-bit secret in base32 is ~52 characters — workable but unpleasant to type correctly. Options: accept it (QR is the primary path, manual entry is a rarely-used fallback and 52 characters typed carefully is still far better than a short PIN); or shorten the manually-typed secret specifically (e.g. 128-bit, ~26 characters) while keeping the QR-only path at 256-bit. Flagging this rather than deciding it — it's a real security/usability tradeoff.
+- **Decided:** the manual-entry fallback uses the same full 256-bit secret as the QR path (~52 base32 characters). One code path, one security level — manual entry is a rare fallback, not the primary path, so the typing cost is acceptable.
 
 ## Threats considered
 
@@ -67,6 +67,10 @@ Not applicable by construction — the QR encodes a literal IP address, and the 
 - Anything persisting on the desktop side beyond the browser tab's own lifetime (no localStorage, no IndexedDB, no cookies set by the transfer page).
 - Defending against a compromised desktop OS or a malicious desktop browser itself (as opposed to a merely-untrusted extension) — that's the same "compromised OS" exclusion already stated in `SECURITY.md` for the rest of the app.
 
-## What I'm asking approval for
+## What was approved
 
-The architecture above (phone-as-server, QR-encoded IP + pairing secret, HKDF-derived AES-256-GCM session, no discovery protocol, explicit per-transfer phone-side consent, single-use/short-lived/backgrounding-torn-down sessions) — and a decision on the manual-entry secret-length tradeoff noted above. Once approved, implementation gets its own phase-gate report like every other phase, with the same testing rigor (this needs both unit tests for the crypto/session-state logic and, ideally, a real two-device manual test before calling it verified — I'll say explicitly what is and isn't machine-verifiable when it lands).
+The architecture above in full: phone-as-server, QR-encoded IP + 256-bit pairing secret (same length for the manual-entry fallback), HKDF-derived AES-256-GCM session, no discovery protocol, explicit per-transfer phone-side consent, single-use/short-lived/backgrounding-torn-down sessions.
+
+## Verification scope, stated up front
+
+The pairing-secret generation, QR/manual-entry payload encoding, HKDF session-key derivation, message encryption, and the session state machine (timeout, single-use, consent, teardown) are ordinary TypeScript logic and are unit-tested the same way as the rest of the app. The actual local HTTP/WebSocket listener is a native networking concern that (a) needs a native TCP/WebSocket server module RN doesn't provide out of the box, and (b) can only be genuinely verified with two real devices on a real LAN, which isn't available in this environment — the same constraint that has left the native Android build itself unverified since Phase 1. That piece is deferred and flagged explicitly rather than claimed as done; see `src/webbridge/` for exactly where the line falls.

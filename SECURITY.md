@@ -6,7 +6,7 @@ This document is written incrementally as Flintlock is built — it covers what 
 
 - **A stolen or lost device, screen locked, app closed.** Vault contents are encrypted at rest under a key that only exists after a correct master password — or, if enabled, a biometric-released hardware key — unwraps it. The vault also auto-locks (idle timer, always; on app backgrounding, configurably; on device lock, always — see `src/unlock/session.ts`), wiping the DEK from memory each time.
 - **A vault file copied off the device.** Without the master password, the wrapped DEK cannot be unwrapped and the vault contents cannot be decrypted or tampered with undetected — every ciphertext is AES-256-GCM-authenticated.
-- **Network-based attacks in general.** There is no backend and no account. Nothing about the vault is transmitted anywhere except the explicit, user-initiated Web Bridge transfer and export flows (not yet built), which will get their own threat model documents before implementation.
+- **Network-based attacks in general.** There is no backend and no account. Nothing about the vault is transmitted anywhere except the explicit, user-initiated Web Bridge transfer and export flows. Web Bridge got its own threat model, reviewed and approved before implementation — see [docs/WEB_BRIDGE_THREAT_MODEL.md](docs/WEB_BRIDGE_THREAT_MODEL.md).
 - **Silent tampering or corruption.** Every decryption path fails closed: a bad auth tag, wrong AAD, or wrong key all produce the same hard error and never a partial or best-effort plaintext result. See `DecryptionError` in [`src/crypto/types.ts`](src/crypto/types.ts).
 
 ## TOTP/HOTP secret storage and clock drift
@@ -14,6 +14,12 @@ This document is written incrementally as Flintlock is built — it covers what 
 TOTP/HOTP shared secrets (`src/storage/schema.ts`'s `TotpEntry.secret`) are vault records like any other — AES-256-GCM-encrypted with the same DEK, AAD-bound to their record id, subject to the same fail-closed decryption as credentials. There is no separate key or weaker path for authenticator secrets.
 
 `src/totp/clockDrift.ts`'s drift warning only detects **sudden, large** jumps in the device's wall clock (comparing it against real elapsed time between two timer ticks) — it cannot detect small, gradual clock skew, which would need a trusted external time source (NTP), and fetching one is a network call this app doesn't make. If the UI ever surfaces this warning, its copy should say the clock looks off, not that it's the reason a code is wrong — the monitor genuinely can't tell the difference between "wrong because of drift" and "wrong for some other reason."
+
+## Web Bridge
+
+The pairing-secret generation, QR/manual-entry encoding, HKDF session-key derivation, message encryption, and the session state machine (`src/webbridge/`) are implemented and unit-tested to the same standard as the rest of the app — 35 tests covering single-use enforcement, timeout, explicit consent gating, memory zeroing on teardown, and fail-closed message decryption.
+
+**The actual local HTTP/WebSocket listener is not yet implemented.** It needs a native TCP/WebSocket server module React Native doesn't provide out of the box, and — more fundamentally — can only be genuinely verified with two real devices on a real LAN, which this environment doesn't have. Claiming Web Bridge "works" before that piece exists and has been tested against real hardware would be exactly the kind of overclaiming this document tries to avoid. Until then, nothing about this feature can transmit data anywhere; the session-management code exists, but nothing is listening on any port.
 
 ## What Flintlock does not protect against
 

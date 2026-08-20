@@ -33,6 +33,12 @@ const QuickCrypto = {
   createDecipheriv: nodeCrypto.createDecipheriv,
   createHmac: nodeCrypto.createHmac,
 
+  // Node's hkdfSync returns an ArrayBuffer; quick-crypto's returns a
+  // Buffer directly — normalize here so the wrapper (hkdf.ts) can rely
+  // on the same Buffer-in-Buffer-out shape as everything else.
+  hkdfSync: (digest: string, key: Buffer, salt: Buffer, info: Buffer, keylen: number): Buffer =>
+    Buffer.from(nodeCrypto.hkdfSync(digest, key, salt, info, keylen)),
+
   argon2: (
     algorithm: string,
     params: {
