@@ -84,4 +84,42 @@ describe('CredentialDetailScreen', () => {
     await seedVault();
     await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'does-not-exist' }, 'missing-credential-message');
   });
+
+  it('shows an attached TOTP code, and none when there is no attached authenticator', async () => {
+    const seed = await seedVault();
+    seed.putRecord(makeCredential());
+    const now = Date.now();
+    seed.putRecord({
+      id: 'totp-1',
+      recordType: 'totp',
+      credentialId: 'cred-1',
+      issuer: 'Example',
+      account: 'alice',
+      secret: 'JBSWY3DPEHPK3PXP',
+      algorithm: 'SHA1',
+      digits: 6,
+      mode: 'totp',
+      period: 30,
+      counter: null,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null,
+    });
+    seed.lock();
+
+    await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');
+
+    await waitFor(() => {
+      expect(screen.getByTestId('totp-code-totp-1')).toBeTruthy();
+    });
+  });
+
+  it('has an "Add 2FA" button that navigates to AddTotp with this credential\'s id', async () => {
+    const seed = await seedVault();
+    seed.putRecord(makeCredential());
+    seed.lock();
+
+    await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');
+    expect(screen.getByTestId('add-totp-button')).toBeTruthy();
+  });
 });

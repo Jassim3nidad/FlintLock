@@ -1,12 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { Button } from '../components/Button';
+import { TotpCodeDisplay } from '../components/TotpCodeDisplay';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
 import { getCredential, hardDeleteCredential, softDeleteCredential } from '../vault/credentialService';
+import { getTotpEntriesForCredential } from '../vault/totpService';
+import { TotpEntry } from '../storage/schema';
 import { ClipboardManager } from '../clipboard/clipboardManager';
 import type { MainStackParamList } from '../navigation/types';
 
@@ -41,6 +44,14 @@ export function CredentialDetailScreen() {
   const clipboardRef = useRef<ClipboardManager>(undefined);
   if (!clipboardRef.current) clipboardRef.current = new ClipboardManager();
   const [copyCountdown, setCopyCountdown] = useState<number | null>(null);
+  const [totpEntries, setTotpEntries] = useState<TotpEntry[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (credential) setTotpEntries(getTotpEntriesForCredential(session, credential.id));
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [session, route.params.credentialId])
+  );
 
   useEffect(() => {
     const unsubscribeTick = clipboardRef.current!.onTick((seconds) => setCopyCountdown(seconds > 0 ? seconds : null));
@@ -63,9 +74,10 @@ export function CredentialDetailScreen() {
     );
   }
 
-  const handleCopy = (value: string) => (): void => {
+  const handleCopyValue = (value: string): void => {
     clipboardRef.current!.copy(value).catch(() => {});
   };
+  const handleCopy = (value: string) => (): void => handleCopyValue(value);
 
   const handleDelete = (): void => {
     Alert.alert('Delete permanently?', `"${credential.title}" will be permanently deleted. This cannot be undone.`, [
@@ -102,6 +114,17 @@ export function CredentialDetailScreen() {
       <Field label="URL" value={credential.urls[0] ?? ''} />
       <Field label="Notes" value={credential.notes} />
 
+      <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>2FA</Text>
+      {totpEntries.map((entry) => (
+        <TotpCodeDisplay key={entry.id} entry={entry} onCopy={handleCopyValue} />
+      ))}
+      <Button
+        label="Add 2FA"
+        onPress={() => navigation.navigate('AddTotp', { credentialId: credential.id })}
+        variant="secondary"
+        testID="add-totp-button"
+      />
+
       <View style={styles.actions}>
         <Button label="Edit" onPress={() => navigation.navigate('CredentialForm', { credentialId: credential.id })} testID="edit-button" />
         <Button label="Move to trash" onPress={handleMoveToTrash} variant="secondary" testID="trash-button" />
@@ -119,5 +142,6 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   fieldValue: { fontSize: 16, flexShrink: 1 },
   countdown: { marginTop: -12, marginBottom: 16, fontSize: 12 },
+  sectionLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 8 },
   actions: { marginTop: 16, gap: 12 },
 });
