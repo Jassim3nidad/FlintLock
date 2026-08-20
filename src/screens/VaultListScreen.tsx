@@ -7,10 +7,18 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
 import { RecordCache } from '../vault/recordCache';
 import { searchCredentials } from '../vault/search';
-import { Credential } from '../storage/schema';
+import { listTags, TagFilterMode } from '../vault/tagService';
+import { Credential, Tag } from '../storage/schema';
 import type { MainStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'VaultList'>;
+
+function applyTagFilter(credentials: Credential[], tagIds: string[], mode: TagFilterMode): Credential[] {
+  if (tagIds.length === 0) return credentials;
+  return credentials.filter((c) =>
+    mode === 'AND' ? tagIds.every((id) => c.tagIds.includes(id)) : tagIds.some((id) => c.tagIds.includes(id))
+  );
+}
 
 export function VaultListScreen() {
   const theme = useTheme();
@@ -21,26 +29,45 @@ export function VaultListScreen() {
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Credential[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [tagMode, setTagMode] = useState<TagFilterMode>('AND');
 
   const refresh = useMemo(
-    () => (q: string) => {
-      setResults(searchCredentials(session, cacheRef.current!, q));
+    () => (q: string, tagIds: string[], mode: TagFilterMode) => {
+      setResults(applyTagFilter(searchCredentials(session, cacheRef.current!, q), tagIds, mode));
     },
     [session]
   );
 
   useFocusEffect(
     React.useCallback(() => {
-      refresh(query);
-      // Intentionally not depending on `query` here — refetch on focus
-      // should reflect whatever's currently typed, not reset it.
+      setAllTags(listTags(session));
+      refresh(query, selectedTagIds, tagMode);
+      // Intentionally not depending on `query`/`selectedTagIds`/`tagMode`
+      // here — refetch on focus should reflect whatever's currently
+      // selected, not reset it.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refresh])
   );
 
   const handleQueryChange = (text: string): void => {
     setQuery(text);
-    refresh(text);
+    refresh(text, selectedTagIds, tagMode);
+  };
+
+  const toggleTag = (tagId: string): void => {
+    const next = selectedTagIds.includes(tagId)
+      ? selectedTagIds.filter((id) => id !== tagId)
+      : [...selectedTagIds, tagId];
+    setSelectedTagIds(next);
+    refresh(query, next, tagMode);
+  };
+
+  const toggleTagMode = (): void => {
+    const next: TagFilterMode = tagMode === 'AND' ? 'OR' : 'AND';
+    setTagMode(next);
+    refresh(query, selectedTagIds, next);
   };
 
   return (
@@ -49,16 +76,61 @@ export function VaultListScreen() {
         <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.title.fontSize }]}>
           Flintlock
         </Text>
-        <Pressable
-          testID="settings-button"
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-          onPress={() => navigation.navigate('Settings')}
-          hitSlop={8}
-        >
-          <Text style={[styles.settingsLabel, { color: theme.colors.primary }]}>Settings</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            testID="manage-tags-button"
+            accessibilityRole="button"
+            accessibilityLabel="Manage tags"
+            onPress={() => navigation.navigate('TagManagement')}
+            hitSlop={8}
+          >
+            <Text style={[styles.settingsLabel, { color: theme.colors.primary }]}>Tags</Text>
+          </Pressable>
+          <Pressable
+            testID="settings-button"
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+            onPress={() => navigation.navigate('Settings')}
+            hitSlop={8}
+          >
+            <Text style={[styles.settingsLabel, { color: theme.colors.primary }]}>Settings</Text>
+          </Pressable>
+        </View>
       </View>
+
+      {allTags.length > 0 && (
+        <View style={styles.tagFilterRow} testID="tag-filter-row">
+          {allTags.map((tag) => {
+            const isSelected = selectedTagIds.includes(tag.id);
+            const chipLabelColor = isSelected ? '#FFFFFF' : theme.colors.textPrimary;
+            return (
+              <Pressable
+                key={tag.id}
+                testID={`tag-filter-${tag.id}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                onPress={() => toggleTag(tag.id)}
+                style={[
+                  styles.tagFilterChip,
+                  { backgroundColor: isSelected ? tag.color : theme.colors.surface, borderRadius: theme.radius.pill },
+                ]}
+              >
+                <Text style={[styles.tagFilterChipLabel, { color: chipLabelColor }]}>{tag.name}</Text>
+              </Pressable>
+            );
+          })}
+          {selectedTagIds.length > 1 && (
+            <Pressable
+              testID="tag-filter-mode"
+              accessibilityRole="button"
+              onPress={toggleTagMode}
+              style={[styles.tagFilterChip, { backgroundColor: theme.colors.surface, borderRadius: theme.radius.pill }]}
+            >
+              <Text style={[styles.tagFilterChipLabel, { color: theme.colors.textSecondary }]}>{tagMode}</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
 
       <TextInput
         testID="search-input"
@@ -117,7 +189,11 @@ export function VaultListScreen() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  headerActions: { flexDirection: 'row', gap: 16 },
   title: { fontWeight: '700' },
+  tagFilterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  tagFilterChip: { paddingVertical: 4, paddingHorizontal: 10 },
+  tagFilterChipLabel: { fontSize: 13 },
   search: { borderWidth: 1, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 16, fontSize: 16 },
   row: { paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth },
   rowTitle: { fontWeight: '600', marginBottom: 2 },

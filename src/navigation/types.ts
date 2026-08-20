@@ -6,4 +6,5 @@ export type MainStackParamList = {
   /** Attaches to a credential when provided; standalone otherwise. */
   AddTotp: { credentialId?: string };
   Settings: undefined;
+  TagManagement: undefined;
 };

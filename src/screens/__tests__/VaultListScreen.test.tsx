@@ -5,9 +5,13 @@ jest.mock('../../preferences/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { Credential } from '../../storage/schema';
+import { Credential, Tag } from '../../storage/schema';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { VaultListScreen } from '../VaultListScreen';
+
+function makeTag(id: string, name: string, color = '#111111'): Tag {
+  return { id, recordType: 'tag', name, color };
+}
 
 function makeCredential(overrides: Partial<Credential> = {}): Credential {
   const now = Date.now();
@@ -87,6 +91,66 @@ describe('VaultListScreen', () => {
     await waitFor(() => {
       expect(screen.getByTestId('credential-row-a')).toBeTruthy();
       expect(screen.queryByTestId('credential-row-b')).toBeNull();
+    });
+  });
+
+  it('shows no tag filter row when there are no tags', async () => {
+    const seed = await seedVault();
+    seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));
+    seed.lock();
+
+    await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
+    await waitFor(() => expect(screen.getByTestId('credential-row-a')).toBeTruthy());
+
+    expect(screen.queryByTestId('tag-filter-row')).toBeNull();
+  });
+
+  it('filters the list by a single selected tag', async () => {
+    const seed = await seedVault();
+    seed.putRecord(makeTag('work', 'Work'));
+    seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', tagIds: ['work'] }));
+    seed.putRecord(makeCredential({ id: 'b', title: 'Bank', tagIds: [] }));
+    seed.lock();
+
+    await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
+    await waitFor(() => expect(screen.getByTestId('credential-row-a')).toBeTruthy());
+    expect(screen.getByTestId('credential-row-b')).toBeTruthy();
+
+    await fireEvent.press(screen.getByTestId('tag-filter-work'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('credential-row-a')).toBeTruthy();
+      expect(screen.queryByTestId('credential-row-b')).toBeNull();
+    });
+  });
+
+  it('combines multiple selected tags with AND by default, then OR after toggling the mode', async () => {
+    const seed = await seedVault();
+    seed.putRecord(makeTag('work', 'Work'));
+    seed.putRecord(makeTag('urgent', 'Urgent'));
+    seed.putRecord(makeCredential({ id: 'both', title: 'Both', tagIds: ['work', 'urgent'] }));
+    seed.putRecord(makeCredential({ id: 'work-only', title: 'WorkOnly', tagIds: ['work'] }));
+    seed.putRecord(makeCredential({ id: 'neither', title: 'Neither', tagIds: [] }));
+    seed.lock();
+
+    await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
+    await waitFor(() => expect(screen.getByTestId('credential-row-both')).toBeTruthy());
+
+    await fireEvent.press(screen.getByTestId('tag-filter-work'));
+    await fireEvent.press(screen.getByTestId('tag-filter-urgent'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('credential-row-both')).toBeTruthy();
+      expect(screen.queryByTestId('credential-row-work-only')).toBeNull();
+      expect(screen.queryByTestId('credential-row-neither')).toBeNull();
+    });
+
+    await fireEvent.press(screen.getByTestId('tag-filter-mode'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('credential-row-both')).toBeTruthy();
+      expect(screen.getByTestId('credential-row-work-only')).toBeTruthy();
+      expect(screen.queryByTestId('credential-row-neither')).toBeNull();
     });
   });
 });

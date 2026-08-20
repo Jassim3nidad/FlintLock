@@ -4,13 +4,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
 import { Tag } from '../storage/schema';
 import { createTag, listTags } from '../vault/tagService';
-import { randomInt } from '../crypto/csprng';
-
-const PALETTE = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#0EA5E9', '#6366F1', '#A855F7', '#EC4899'];
-
-function randomColor(): string {
-  return PALETTE[randomInt(PALETTE.length)]!;
-}
+import { randomTagColor } from './tagPalette';
 
 interface TagPickerProps {
   selectedTagIds: string[];
@@ -45,7 +39,7 @@ export function TagPicker({ selectedTagIds, onChange }: TagPickerProps) {
 
   const handleCreateNew = (): void => {
     if (!trimmedQuery) return;
-    const tag = createTag(session, trimmedQuery, randomColor());
+    const tag = createTag(session, trimmedQuery, randomTagColor());
     setAllTags((prev) => [...prev, tag]);
     onChange([...selectedTagIds, tag.id]);
     setQuery('');
