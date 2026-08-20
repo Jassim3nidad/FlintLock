@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { Button } from '../components/Button';
 import { TextField } from '../components/TextField';
+import { OptionRow } from '../components/OptionRow';
 import { useTheme, useThemePreference } from '../theme/ThemeProvider';
 import { ThemePreference } from '../preferences/themePreference';
 import { useVaultSession } from '../state/VaultSessionProvider';
@@ -11,42 +14,16 @@ import { VaultSettings } from '../storage/schema';
 import { VaultStore } from '../storage/vaultStore';
 import { Buffer, DecryptionError } from '../crypto';
 import { enrollBiometricUnlock, disableBiometricUnlock, isBiometricHardwareAvailable } from '../biometric/biometricVault';
+import type { MainStackParamList } from '../navigation/types';
 
 const AUTO_LOCK_OPTIONS: VaultSettings['autoLock'][] = ['immediate', '30s', '1m', '5m', '15m', '30m', 'never'];
 const THEME_OPTIONS: ThemePreference[] = ['system', 'light', 'dark'];
 
-function OptionRow<T extends string>({ options, selected, onSelect }: { options: T[]; selected: T; onSelect: (v: T) => void }) {
-  const theme = useTheme();
-  return (
-    <View style={styles.optionRow}>
-      {options.map((option) => {
-        const isSelected = option === selected;
-        return (
-          <Pressable
-            key={option}
-            testID={`option-${option}`}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected }}
-            onPress={() => onSelect(option)}
-            style={[
-              styles.optionChip,
-              {
-                backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-                borderRadius: theme.radius.pill,
-              },
-            ]}
-          >
-            <Text style={{ color: isSelected ? theme.colors.onPrimary : theme.colors.textPrimary }}>{option}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
+type Nav = NativeStackNavigationProp<MainStackParamList>;
 
 export function SettingsScreen() {
   const theme = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<Nav>();
   const { session, lock } = useVaultSession();
   const [preference, setPreference] = useThemePreference();
   const [settings, setSettings] = useState(session.vault.settings);
@@ -150,6 +127,11 @@ export function SettingsScreen() {
       <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>Appearance</Text>
       <OptionRow options={THEME_OPTIONS} selected={preference} onSelect={setPreference} />
 
+      <Text style={[styles.sectionLabel, { color: theme.colors.textSecondary }]}>Data</Text>
+      <Button label="Export vault" onPress={() => navigation.navigate('Export')} variant="secondary" testID="export-nav-button" />
+      <View style={styles.spacer} />
+      <Button label="Import vault" onPress={() => navigation.navigate('Import')} variant="secondary" testID="import-nav-button" />
+
       <View style={styles.spacer} />
       <Button label="Lock now" onPress={lock} variant="secondary" testID="lock-now-button" />
       <View style={styles.spacer} />
@@ -161,8 +143,6 @@ export function SettingsScreen() {
 const styles = StyleSheet.create({
   title: { fontWeight: '700', marginBottom: 24 },
   sectionLabel: { fontSize: 13, fontWeight: '600', marginBottom: 8, marginTop: 8 },
-  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
-  optionChip: { paddingVertical: 8, paddingHorizontal: 16 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   confirmPanel: { padding: 16, marginBottom: 16 },
   confirmIntro: { marginBottom: 12 },

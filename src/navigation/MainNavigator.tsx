@@ -7,6 +7,8 @@ import { AddTotpScreen } from '../screens/AddTotpScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { TagManagementScreen } from '../screens/TagManagementScreen';
 import { SecurityDashboardScreen } from '../screens/SecurityDashboardScreen';
+import { ExportScreen } from '../screens/ExportScreen';
+import { ImportScreen } from '../screens/ImportScreen';
 import type { MainStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
@@ -21,6 +23,8 @@ export function MainNavigator() {
       <Stack.Screen name="Settings" component={SettingsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="TagManagement" component={TagManagementScreen} options={{ headerShown: false }} />
       <Stack.Screen name="SecurityDashboard" component={SecurityDashboardScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Export" component={ExportScreen} options={{ headerShown: false }} />
+      <Stack.Screen name="Import" component={ImportScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

@@ -21,6 +21,12 @@ The pairing-secret generation, QR/manual-entry encoding, HKDF session-key deriva
 
 **The actual local HTTP/WebSocket listener is not yet implemented.** It needs a native TCP/WebSocket server module React Native doesn't provide out of the box, and — more fundamentally — can only be genuinely verified with two real devices on a real LAN, which this environment doesn't have. Claiming Web Bridge "works" before that piece exists and has been tested against real hardware would be exactly the kind of overclaiming this document tries to avoid. Until then, nothing about this feature can transmit data anywhere; the session-management code exists, but nothing is listening on any port.
 
+## Export / Import
+
+`.flbx` export (`src/export/flbxService.ts`) encrypts every vault record under a key derived fresh from a re-entered master password — independent of the vault's own DEK/KEK, so a leaked export never bears on the live vault or vice versa (see [docs/FLBX_FORMAT.md](docs/FLBX_FORMAT.md)). CSV and KeePass-XML export are plaintext by design (that's the point of an interchange format another tool can read) and are gated behind a blocking in-app warning the user must explicitly acknowledge before the file is generated, on top of the same master-password re-entry required for every export format. `.flbx` import previews every record's add/update/unchanged classification against the live vault before anything is written, and supports merge or full-replace once confirmed.
+
+**Getting the resulting bytes on or off the device is a known, explicitly-flagged gap.** Sharing an export currently goes through React Native core's own `Share` API (`src/files/native.ts`) — real and functional, but text-only, so the binary `.flbx` output is base64-encoded first; there's no file actually written to disk yet, only handed to the OS share sheet. Picking a file back in for import has no built-in React Native equivalent at all and needs a native document-picker module, which isn't installed — `fileSystem.pickFile()` throws rather than silently pretending to succeed. Closing this gap needs a dependency decision (e.g. `react-native-document-picker` plus a real filesystem-write module) that hasn't been made yet.
+
 ## What Flintlock does not protect against
 
 Stated plainly, per the project's own instruction that overclaiming is worse than a missing feature:

@@ -37,6 +37,14 @@ describe('SettingsScreen — auto-lock and background settings', () => {
       expect(header.settings.lockOnBackground).toBe(false);
     });
   });
+
+  it('has Export vault and Import vault buttons', async () => {
+    await seedVault();
+    await renderUnlockedScreen(SettingsScreen, undefined, 'lock-now-button');
+
+    expect(screen.getByTestId('export-nav-button')).toBeTruthy();
+    expect(screen.getByTestId('import-nav-button')).toBeTruthy();
+  });
 });
 
 describe('SettingsScreen — biometric enrollment', () => {

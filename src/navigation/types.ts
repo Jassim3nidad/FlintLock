@@ -8,4 +8,6 @@ export type MainStackParamList = {
   Settings: undefined;
   TagManagement: undefined;
   SecurityDashboard: undefined;
+  Export: undefined;
+  Import: undefined;
 };
