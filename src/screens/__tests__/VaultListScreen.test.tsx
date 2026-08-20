@@ -94,6 +94,12 @@ describe('VaultListScreen', () => {
     });
   });
 
+  it('has a Security dashboard button', async () => {
+    await seedVault();
+    await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
+    expect(screen.getByTestId('security-dashboard-button')).toBeTruthy();
+  });
+
   it('shows no tag filter row when there are no tags', async () => {
     const seed = await seedVault();
     seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));

@@ -78,6 +78,15 @@ export function VaultListScreen() {
         </Text>
         <View style={styles.headerActions}>
           <Pressable
+            testID="security-dashboard-button"
+            accessibilityRole="button"
+            accessibilityLabel="Security dashboard"
+            onPress={() => navigation.navigate('SecurityDashboard')}
+            hitSlop={8}
+          >
+            <Text style={[styles.settingsLabel, { color: theme.colors.primary }]}>Security</Text>
+          </Pressable>
+          <Pressable
             testID="manage-tags-button"
             accessibilityRole="button"
             accessibilityLabel="Manage tags"

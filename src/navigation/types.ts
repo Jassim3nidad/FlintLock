@@ -7,4 +7,5 @@ export type MainStackParamList = {
   AddTotp: { credentialId?: string };
   Settings: undefined;
   TagManagement: undefined;
+  SecurityDashboard: undefined;
 };
