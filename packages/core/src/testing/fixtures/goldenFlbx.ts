@@ -5,6 +5,18 @@ import { VaultRecord } from '../../storage/schema';
  * goldenFlbxCheck.ts. Low PBKDF2 iteration count deliberately: this
  * fixture exists to catch format drift, not to model a real vault's KDF
  * cost.
+ *
+ * Hygiene invariant, checked by inspection every time this file is
+ * touched: every value below is synthetic and the master password is
+ * this literal, publicly-committed string — never a real one. This file
+ * is checked into git history permanently and is allowlisted in
+ * .secret-scan-ignore (high-entropy match on the base64 blob below,
+ * which is real AES-256-GCM ciphertext and is *supposed* to look
+ * random). Never paste a real credential, a real TOTP secret, or a
+ * real password into this file to "test with realistic data" — encrypt
+ * a synthetic one instead, the same way GOLDEN_FLBX_RECORDS already
+ * does (example.com domains, an explicitly-labeled fixture note, the
+ * well-known RFC-tutorial TOTP test secret 'JBSWY3DPEHPK3PXP').
  */
 export const GOLDEN_FLBX_MASTER_PASSWORD = 'correct horse battery staple';
 export const GOLDEN_FLBX_KDF_PARAMS = { kdf: 'pbkdf2' as const, iterations: 1000, digest: 'sha256' as const };

@@ -16,6 +16,16 @@ import { PBKDF2_SHA256_VECTORS } from './vectors/pbkdf2.vectors';
  * KeyHandle's raw bytes for assertions this suite needs to make
  * (e.g. "derived key is 32 bytes") without packages/core ever getting
  * that ability itself — see CryptoProvider.ts.
+ *
+ * Same caveat as goldenFlbxCheck.ts applies here today: apps/mobile's
+ * registered run goes through `jest.mock('.../crypto/native')`, i.e.
+ * Node's `crypto` standing in for react-native-quick-crypto — it has
+ * never actually exercised quick-crypto's native binding. Until a web
+ * provider is registered here too and mobile's result has been checked
+ * at least once on a real device, this suite proves internal
+ * consistency of the wrapper logic (parameter marshalling, AAD
+ * handling, IV/tag plumbing), not agreement between independent crypto
+ * implementations.
  */
 export function describeCryptoProviderConformance(
   name: string,

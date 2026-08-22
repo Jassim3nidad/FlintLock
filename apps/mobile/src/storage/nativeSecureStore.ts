@@ -1,6 +1,17 @@
 import { Buffer, SecureStore } from '@flintlock/core';
 import { vaultStorage } from './native';
 
+function writeBytes(key: string, value: Buffer): void {
+  // MMKV's buffer overload wants a real ArrayBuffer, not a Buffer/typed
+  // array view, so this can't just pass `value` through. Unlike the
+  // banned `.buffer` pattern (packages/core's lint rule), this slices
+  // by byteOffset/byteLength first — ArrayBuffer#slice always copies,
+  // so what MMKV receives is exactly value's own bytes, never a wider
+  // shared pool allocation underneath a small Buffer view.
+  const arrayBuffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+  vaultStorage.set(key, arrayBuffer);
+}
+
 /**
  * MMKV-backed SecureStore. Resolves synchronously under the hood — MMKV
  * itself has no async API — wrapped in an already-resolved Promise
@@ -10,18 +21,30 @@ import { vaultStorage } from './native';
 export const nativeSecureStore: SecureStore = {
   async getItem(key: string) {
     const packed = vaultStorage.getBuffer(key);
-    return packed ? Buffer.from(packed) : undefined;
+    if (packed) return Buffer.from(packed);
+
+    // Compatibility path: before the monorepo migration, VaultStore wrote
+    // the header and index directly as MMKV *strings*
+    // (`vaultStorage.set(key, JSON.stringify(...))`); every SecureStore
+    // key is bytes now. A vault created by that older code has a header
+    // MMKV can only return via getString(), not getBuffer() — without
+    // this fallback, open() would fail with a DecryptionError
+    // indistinguishable from a wrong password, for a vault whose
+    // password is completely correct. Detect that shape, convert it, and
+    // write it back as bytes so this path is only ever taken once per
+    // key — the vault is fully migrated in place, silently, on next
+    // successful unlock.
+    const legacyString = vaultStorage.getString(key);
+    if (legacyString === undefined) return undefined;
+
+    const migrated = Buffer.from(legacyString, 'utf8');
+    console.warn(`[flintlock] Migrating legacy string-encoded storage key "${key}" to byte encoding.`);
+    writeBytes(key, migrated);
+    return migrated;
   },
 
   async setItem(key: string, value: Buffer) {
-    // MMKV's buffer overload wants a real ArrayBuffer, not a Buffer/typed
-    // array view, so this can't just pass `value` through. Unlike the
-    // banned `.buffer` pattern (packages/core's lint rule), this slices
-    // by byteOffset/byteLength first — ArrayBuffer#slice always copies,
-    // so what MMKV receives is exactly value's own bytes, never a wider
-    // shared pool allocation underneath a small Buffer view.
-    const arrayBuffer = value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
-    vaultStorage.set(key, arrayBuffer);
+    writeBytes(key, value);
   },
 
   async removeItem(key) {
