@@ -1,4 +1,4 @@
-import { randomInt } from '../crypto/csprng';
+import { randomInt } from '@flintlock/core';
 
 export const TAG_PALETTE = ['#EF4444', '#F97316', '#EAB308', '#22C55E', '#0EA5E9', '#6366F1', '#A855F7', '#EC4899'];
 

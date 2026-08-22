@@ -7,9 +7,15 @@ import { TextField } from '../components/TextField';
 import { OptionRow } from '../components/OptionRow';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Buffer, DecryptionError } from '../crypto';
-import { commitFlbxImport, ImportMode, ImportPreview, previewFlbxImport } from '../export/flbxService';
-import { FlbxFormatError } from '../export/flbxFormat';
+import {
+  Buffer,
+  commitFlbxImport,
+  DecryptionError,
+  FlbxFormatError,
+  ImportMode,
+  ImportPreview,
+  previewFlbxImport,
+} from '@flintlock/core';
 import { fileSystem } from '../files/native';
 import { PickedFile } from '../files/types';
 
@@ -64,10 +70,15 @@ export function ImportScreen() {
 
   const handleImport = (): void => {
     if (!preview) return;
-    commitFlbxImport(session, preview, mode);
-    setImported(true);
-    setPreview(null);
-    setPickedFile(null);
+    commitFlbxImport(session, preview, mode)
+      .then(() => {
+        setImported(true);
+        setPreview(null);
+        setPickedFile(null);
+      })
+      .catch(() => {
+        setError('Import failed');
+      });
   };
 
   return (

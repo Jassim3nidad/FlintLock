@@ -2,10 +2,11 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { screen, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { Credential, TotpEntry } from '../../storage/schema';
+import { Credential, TotpEntry } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { SecurityDashboardScreen } from '../SecurityDashboardScreen';
 
@@ -66,7 +67,7 @@ describe('SecurityDashboardScreen', () => {
 
   it('flags a weak password', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'weak', password: 'abc' }));
+    await seed.putRecord(makeCredential({ id: 'weak', password: 'abc' }));
     seed.lock();
 
     await renderUnlockedScreen(SecurityDashboardScreen, undefined, 'weak-password-weak');
@@ -75,8 +76,8 @@ describe('SecurityDashboardScreen', () => {
 
   it('flags reused passwords across credentials sharing the same password', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'a', title: 'Site A', password: 'sharedPassword123!' }));
-    seed.putRecord(makeCredential({ id: 'b', title: 'Site B', password: 'sharedPassword123!' }));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'Site A', password: 'sharedPassword123!' }));
+    await seed.putRecord(makeCredential({ id: 'b', title: 'Site B', password: 'sharedPassword123!' }));
     seed.lock();
 
     await renderUnlockedScreen(SecurityDashboardScreen, undefined, 'reused-group-0');
@@ -87,7 +88,7 @@ describe('SecurityDashboardScreen', () => {
   it('flags an old password', async () => {
     const seed = await seedVault();
     const longAgo = Date.now() - 400 * 24 * 60 * 60 * 1000;
-    seed.putRecord(makeCredential({ id: 'old', passwordUpdatedAt: longAgo }));
+    await seed.putRecord(makeCredential({ id: 'old', passwordUpdatedAt: longAgo }));
     seed.lock();
 
     await renderUnlockedScreen(SecurityDashboardScreen, undefined, 'old-password-old');
@@ -96,9 +97,9 @@ describe('SecurityDashboardScreen', () => {
 
   it('flags credentials with no attached 2FA and excludes those that have one', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'no-2fa' }));
-    seed.putRecord(makeCredential({ id: 'has-2fa' }));
-    seed.putRecord(makeTotpEntry({ id: 'totp-1', credentialId: 'has-2fa' }));
+    await seed.putRecord(makeCredential({ id: 'no-2fa' }));
+    await seed.putRecord(makeCredential({ id: 'has-2fa' }));
+    await seed.putRecord(makeTotpEntry({ id: 'totp-1', credentialId: 'has-2fa' }));
     seed.lock();
 
     await renderUnlockedScreen(SecurityDashboardScreen, undefined, 'missing-2fa-no-2fa');

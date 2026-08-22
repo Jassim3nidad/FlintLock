@@ -2,10 +2,11 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { unlockWithBiometrics } from '../../biometric/biometricVault';
+import { Buffer, getBiometricKeySource } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault, TEST_PASSWORD } from '../../testUtils/renderUnlockedScreen';
 import { SettingsScreen } from '../SettingsScreen';
 
@@ -21,7 +22,7 @@ describe('SettingsScreen — auto-lock and background settings', () => {
     await fireEvent.press(screen.getByTestId('option-5m'));
 
     await waitFor(() => {
-      const header = JSON.parse(vaultStorage.getString('vault:header')!);
+      const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
       expect(header.settings.autoLock).toBe('5m');
     });
   });
@@ -33,7 +34,7 @@ describe('SettingsScreen — auto-lock and background settings', () => {
     await fireEvent(screen.getByTestId('lock-on-background-switch'), 'valueChange', false);
 
     await waitFor(() => {
-      const header = JSON.parse(vaultStorage.getString('vault:header')!);
+      const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
       expect(header.settings.lockOnBackground).toBe(false);
     });
   });
@@ -65,7 +66,7 @@ describe('SettingsScreen — biometric enrollment', () => {
       expect(screen.getByTestId('biometric-confirm-panel')).toBeTruthy();
     });
     // Not enrolled yet — enrollment happens only after password confirmation.
-    const header = JSON.parse(vaultStorage.getString('vault:header')!);
+    const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
     expect(header.settings.biometricUnlockEnabled).toBe(false);
   });
 
@@ -80,10 +81,10 @@ describe('SettingsScreen — biometric enrollment', () => {
     await fireEvent.press(screen.getByTestId('biometric-confirm-button'));
 
     await waitFor(() => {
-      const header = JSON.parse(vaultStorage.getString('vault:header')!);
+      const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
       expect(header.settings.biometricUnlockEnabled).toBe(true);
     });
-    const dek = await unlockWithBiometrics();
+    const dek = await getBiometricKeySource().unlock();
     expect(dek).not.toBeNull();
   });
 
@@ -100,7 +101,7 @@ describe('SettingsScreen — biometric enrollment', () => {
     await waitFor(() => {
       expect(screen.getByTestId('biometric-error')).toHaveTextContent(/incorrect master password/i);
     });
-    const header = JSON.parse(vaultStorage.getString('vault:header')!);
+    const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
     expect(header.settings.biometricUnlockEnabled).toBe(false);
   });
 });

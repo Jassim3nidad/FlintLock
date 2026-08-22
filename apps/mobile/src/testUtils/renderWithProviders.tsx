@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { VaultSessionProvider } from '../state/VaultSessionProvider';
+import { configureNativeTestPlatform } from './configureNativePlatform';
 
 /**
  * Wraps a screen under test with the same providers App.tsx wires up in
@@ -12,6 +13,7 @@ import { VaultSessionProvider } from '../state/VaultSessionProvider';
  * other test in this project.
  */
 export function withProviders(ui: React.ReactElement): React.ReactElement {
+  configureNativeTestPlatform();
   return (
     <ThemeProvider>
       <VaultSessionProvider>{ui}</VaultSessionProvider>

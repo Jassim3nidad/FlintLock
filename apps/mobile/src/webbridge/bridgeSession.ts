@@ -1,5 +1,4 @@
-import { Buffer } from '../crypto';
-import { randomUUID } from '../crypto/csprng';
+import { Buffer, getCryptoProvider, KeyHandle, randomUUID } from '@flintlock/core';
 import { generatePairingSecret, QrPayload } from './pairing';
 import { deriveSessionKey } from './sessionCrypto';
 
@@ -33,7 +32,7 @@ export class BridgeSession {
   readonly sessionId: string;
   readonly expiresAt: number;
   private pairingSecret: Buffer | null;
-  private derivedSessionKey: Buffer | null = null;
+  private derivedSessionKey: KeyHandle | null = null;
   private state: BridgeSessionState = 'pending';
   private pendingRequest: TransferRequest | null = null;
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -85,10 +84,10 @@ export class BridgeSession {
     this.state = 'connected';
   }
 
-  sessionKey(): Buffer {
+  async sessionKey(): Promise<KeyHandle> {
     this.requirePairingSecret();
     if (!this.derivedSessionKey) {
-      this.derivedSessionKey = deriveSessionKey(this.pairingSecret!, this.sessionId);
+      this.derivedSessionKey = await deriveSessionKey(this.pairingSecret!, this.sessionId);
     }
     return this.derivedSessionKey;
   }
@@ -149,7 +148,7 @@ export class BridgeSession {
     if (reason === 'timeout') this.state = 'expired';
     this.pairingSecret?.fill(0);
     this.pairingSecret = null;
-    this.derivedSessionKey?.fill(0);
+    if (this.derivedSessionKey) getCryptoProvider().disposeKey(this.derivedSessionKey);
     this.derivedSessionKey = null;
     this.pendingRequest = null;
     for (const listener of this.teardownListeners) listener(reason);

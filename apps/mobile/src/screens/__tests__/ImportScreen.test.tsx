@@ -3,14 +3,12 @@ jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
 jest.mock('../../files/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Buffer } from '../../crypto';
+import { Buffer, Credential, exportFlbx, UnlockSession } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
-import { Credential } from '../../storage/schema';
 import { renderUnlockedScreen, seedVault, TEST_PASSWORD, FAST_KDF } from '../../testUtils/renderUnlockedScreen';
-import { exportFlbx } from '../../export/flbxService';
-import { UnlockSession } from '../../unlock/session';
 import { ImportScreen } from '../ImportScreen';
 
 // jest.mock('../../files/native') and a direct import of the __mocks__
@@ -73,7 +71,7 @@ describe('ImportScreen', () => {
     // Build a real .flbx file from a throwaway vault so the preview's
     // decrypt-and-classify logic runs against genuine encrypted bytes.
     const otherVaultSeed = await seedVault();
-    otherVaultSeed.putRecord(makeCredential({ id: 'imported-cred', title: 'Imported' }));
+    await otherVaultSeed.putRecord(makeCredential({ id: 'imported-cred', title: 'Imported' }));
     const otherSession = new UnlockSession();
     await otherSession.unlockWithPassword(TEST_PASSWORD);
     const flbxBuffer = await exportFlbx(otherSession, TEST_PASSWORD, FAST_KDF);

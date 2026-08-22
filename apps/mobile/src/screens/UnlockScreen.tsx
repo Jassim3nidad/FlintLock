@@ -5,9 +5,7 @@ import { TextField } from '../components/TextField';
 import { Button } from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Buffer, DecryptionError } from '../crypto';
-import { VaultStore } from '../storage/vaultStore';
-import { isBiometricHardwareAvailable } from '../biometric/biometricVault';
+import { Buffer, DecryptionError, getBiometricKeySource, VaultStore } from '@flintlock/core';
 
 export function UnlockScreen() {
   const theme = useTheme();
@@ -20,10 +18,10 @@ export function UnlockScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const settings = VaultStore.peekSettings();
+      const settings = await VaultStore.peekSettings();
       if (!settings?.biometricUnlockEnabled) return;
-      const hardwareAvailable = await isBiometricHardwareAvailable();
-      if (!cancelled) setShowBiometricButton(hardwareAvailable);
+      const strength = await getBiometricKeySource().strength();
+      if (!cancelled) setShowBiometricButton(strength !== 'unsupported');
     })();
     return () => {
       cancelled = true;

@@ -7,11 +7,7 @@ import { TextField } from '../components/TextField';
 import { OptionRow } from '../components/OptionRow';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { VaultStore } from '../storage/vaultStore';
-import { Buffer, DecryptionError } from '../crypto';
-import { exportFlbx } from '../export/flbxService';
-import { exportCsv } from '../export/csvExport';
-import { exportKeePassXml } from '../export/keepassXmlExport';
+import { Buffer, DecryptionError, exportCsv, exportFlbx, exportKeePassXml, getCryptoProvider, VaultStore } from '@flintlock/core';
 import { fileSystem } from '../files/native';
 
 type ExportFormat = 'flbx' | 'csv' | 'keepass';
@@ -48,16 +44,16 @@ export function ExportScreen() {
     try {
       passwordBuffer = Buffer.from(password, 'utf8');
       const dek = await VaultStore.verifyPasswordAndGetDek(passwordBuffer);
-      dek.fill(0);
+      getCryptoProvider().disposeKey(dek);
 
       if (format === 'flbx') {
         const fileBuffer = await exportFlbx(session, passwordBuffer);
         await fileSystem.shareText(fileBuffer.toString('base64'), 'Flintlock backup (.flbx, base64-encoded)');
       } else if (format === 'csv') {
-        const csv = exportCsv(session, { acknowledgeRisk: true });
+        const csv = await exportCsv(session, { acknowledgeRisk: true });
         await fileSystem.shareText(csv, 'Flintlock export (CSV)');
       } else {
-        const xml = exportKeePassXml(session, { acknowledgeRisk: true });
+        const xml = await exportKeePassXml(session, { acknowledgeRisk: true });
         await fileSystem.shareText(xml, 'Flintlock export (KeePass XML)');
       }
       setSuccess(true);

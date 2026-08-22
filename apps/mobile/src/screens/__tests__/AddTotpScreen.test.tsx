@@ -2,6 +2,7 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
@@ -31,7 +32,7 @@ describe('AddTotpScreen — manual entry', () => {
   it('creates a TOTP entry attached to a credential when a credentialId param is given', async () => {
     const seed = await seedVault();
     const now = Date.now();
-    seed.putRecord({
+    await seed.putRecord({
       id: 'cred-1',
       recordType: 'credential',
       title: 'X',

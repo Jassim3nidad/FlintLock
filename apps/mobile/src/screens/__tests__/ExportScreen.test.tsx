@@ -3,9 +3,10 @@ jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
 jest.mock('../../files/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Buffer } from '../../crypto';
+import { Buffer } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
 import { renderUnlockedScreen, seedVault, TEST_PASSWORD } from '../../testUtils/renderUnlockedScreen';
 import { ExportScreen } from '../ExportScreen';

@@ -2,12 +2,13 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import React, { useState } from 'react';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
-import { Tag } from '../../storage/schema';
+import { Tag } from '@flintlock/core';
 import { TagPicker } from '../TagPicker';
 
 beforeEach(() => {
@@ -42,7 +43,7 @@ describe('TagPicker', () => {
   it('suggests and adds an existing tag instead of creating a duplicate', async () => {
     const seed = await seedVault();
     const tag: Tag = { id: 'tag-work', recordType: 'tag', name: 'Work', color: '#111111' };
-    seed.putRecord(tag);
+    await seed.putRecord(tag);
     seed.lock();
 
     await renderUnlockedScreen(HarnessSelectExisting, undefined, 'tag-input');

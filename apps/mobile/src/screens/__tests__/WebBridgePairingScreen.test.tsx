@@ -1,15 +1,20 @@
 jest.mock('../../crypto/native');
+jest.mock('../../storage/native');
+jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeProvider';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 import { WebBridgePairingScreen } from '../WebBridgePairingScreen';
 
 const Stack = createNativeStackNavigator();
 
 async function renderScreen(): Promise<void> {
+  configureNativeTestPlatform();
   await render(
     <ThemeProvider>
       <NavigationContainer>

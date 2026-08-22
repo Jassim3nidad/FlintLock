@@ -2,10 +2,11 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { Credential, Tag } from '../../storage/schema';
+import { Credential, Tag } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { VaultListScreen } from '../VaultListScreen';
 
@@ -51,8 +52,8 @@ describe('VaultListScreen', () => {
 
   it('lists credentials by title and username', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', username: 'octocat' }));
-    seed.putRecord(makeCredential({ id: 'b', title: 'Bank', username: 'someone' }));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', username: 'octocat' }));
+    await seed.putRecord(makeCredential({ id: 'b', title: 'Bank', username: 'someone' }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
@@ -65,8 +66,8 @@ describe('VaultListScreen', () => {
 
   it('filters the list as the search query changes', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', username: 'octocat' }));
-    seed.putRecord(makeCredential({ id: 'b', title: 'Bank', username: 'someone' }));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', username: 'octocat' }));
+    await seed.putRecord(makeCredential({ id: 'b', title: 'Bank', username: 'someone' }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
@@ -82,8 +83,8 @@ describe('VaultListScreen', () => {
 
   it('excludes soft-deleted (trashed) credentials from the list', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));
-    seed.putRecord(makeCredential({ id: 'b', title: 'Trashed', deletedAt: Date.now() }));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));
+    await seed.putRecord(makeCredential({ id: 'b', title: 'Trashed', deletedAt: Date.now() }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
@@ -102,7 +103,7 @@ describe('VaultListScreen', () => {
 
   it('shows no tag filter row when there are no tags', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'Active' }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
@@ -113,9 +114,9 @@ describe('VaultListScreen', () => {
 
   it('filters the list by a single selected tag', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work'));
-    seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', tagIds: ['work'] }));
-    seed.putRecord(makeCredential({ id: 'b', title: 'Bank', tagIds: [] }));
+    await seed.putRecord(makeTag('work', 'Work'));
+    await seed.putRecord(makeCredential({ id: 'a', title: 'GitHub', tagIds: ['work'] }));
+    await seed.putRecord(makeCredential({ id: 'b', title: 'Bank', tagIds: [] }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');
@@ -132,11 +133,11 @@ describe('VaultListScreen', () => {
 
   it('combines multiple selected tags with AND by default, then OR after toggling the mode', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work'));
-    seed.putRecord(makeTag('urgent', 'Urgent'));
-    seed.putRecord(makeCredential({ id: 'both', title: 'Both', tagIds: ['work', 'urgent'] }));
-    seed.putRecord(makeCredential({ id: 'work-only', title: 'WorkOnly', tagIds: ['work'] }));
-    seed.putRecord(makeCredential({ id: 'neither', title: 'Neither', tagIds: [] }));
+    await seed.putRecord(makeTag('work', 'Work'));
+    await seed.putRecord(makeTag('urgent', 'Urgent'));
+    await seed.putRecord(makeCredential({ id: 'both', title: 'Both', tagIds: ['work', 'urgent'] }));
+    await seed.putRecord(makeCredential({ id: 'work-only', title: 'WorkOnly', tagIds: ['work'] }));
+    await seed.putRecord(makeCredential({ id: 'neither', title: 'Neither', tagIds: [] }));
     seed.lock();
 
     await renderUnlockedScreen(VaultListScreen, undefined, 'search-input');

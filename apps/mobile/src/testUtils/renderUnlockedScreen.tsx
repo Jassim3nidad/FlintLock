@@ -2,10 +2,10 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Buffer } from '../crypto';
-import { VaultStore } from '../storage/vaultStore';
+import { Buffer, VaultStore } from '@flintlock/core';
 import { useVaultSession, VaultSessionProvider } from '../state/VaultSessionProvider';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { configureNativeTestPlatform } from './configureNativePlatform';
 
 export const TEST_PASSWORD = Buffer.from('pw');
 export const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
@@ -31,6 +31,8 @@ export async function renderUnlockedScreen<P extends object>(
   params: P | undefined,
   waitForTestId: string
 ) {
+  configureNativeTestPlatform();
+
   function Bootstrap() {
     const { session, unlockWithPassword } = useVaultSession();
     React.useEffect(() => {
@@ -63,6 +65,7 @@ export async function renderUnlockedScreen<P extends object>(
 
 /** Creates a vault with the standard test password/KDF and locks it, leaving it ready for renderUnlockedScreen() to open. */
 export async function seedVault(): Promise<VaultStore> {
+  configureNativeTestPlatform();
   const store = await VaultStore.create(TEST_PASSWORD, FAST_KDF);
   return store;
 }

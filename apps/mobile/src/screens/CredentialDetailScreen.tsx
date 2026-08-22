@@ -7,10 +7,15 @@ import { Button } from '../components/Button';
 import { TotpCodeDisplay } from '../components/TotpCodeDisplay';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { getCredential, hardDeleteCredential, softDeleteCredential } from '../vault/credentialService';
-import { getTotpEntriesForCredential } from '../vault/totpService';
-import { TotpEntry } from '../storage/schema';
-import { ClipboardManager } from '../clipboard/clipboardManager';
+import {
+  ClipboardManager,
+  Credential,
+  getCredential,
+  getTotpEntriesForCredential,
+  hardDeleteCredential,
+  softDeleteCredential,
+  TotpEntry,
+} from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Route = NativeStackScreenProps<MainStackParamList, 'CredentialDetail'>['route'];
@@ -39,17 +44,28 @@ export function CredentialDetailScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
   const { session } = useVaultSession();
-  const credential = getCredential(session, route.params.credentialId);
+
+  const [loaded, setLoaded] = useState(false);
+  const [credential, setCredential] = useState<Credential | undefined>(undefined);
+  const [totpEntries, setTotpEntries] = useState<TotpEntry[]>([]);
 
   const clipboardRef = useRef<ClipboardManager>(undefined);
   if (!clipboardRef.current) clipboardRef.current = new ClipboardManager();
   const [copyCountdown, setCopyCountdown] = useState<number | null>(null);
-  const [totpEntries, setTotpEntries] = useState<TotpEntry[]>([]);
 
   useFocusEffect(
     useCallback(() => {
-      if (credential) setTotpEntries(getTotpEntriesForCredential(session, credential.id));
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+      let cancelled = false;
+      (async () => {
+        const cred = await getCredential(session, route.params.credentialId);
+        if (cancelled) return;
+        setCredential(cred);
+        setTotpEntries(cred ? await getTotpEntriesForCredential(session, cred.id) : []);
+        setLoaded(true);
+      })();
+      return () => {
+        cancelled = true;
+      };
     }, [session, route.params.credentialId])
   );
 
@@ -63,6 +79,8 @@ export function CredentialDetailScreen() {
       unsubscribeLock();
     };
   }, [session]);
+
+  if (!loaded) return null;
 
   if (!credential) {
     return (
@@ -86,16 +104,18 @@ export function CredentialDetailScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          hardDeleteCredential(session, credential.id);
-          navigation.goBack();
+          hardDeleteCredential(session, credential.id)
+            .then(() => navigation.goBack())
+            .catch(() => {});
         },
       },
     ]);
   };
 
   const handleMoveToTrash = (): void => {
-    softDeleteCredential(session, credential.id);
-    navigation.goBack();
+    softDeleteCredential(session, credential.id)
+      .then(() => navigation.goBack())
+      .catch(() => {});
   };
 
   return (

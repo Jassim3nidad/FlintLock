@@ -5,8 +5,7 @@ import { TextField } from '../components/TextField';
 import { Button } from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Buffer } from '../crypto';
-import { estimatePasswordEntropyBits } from '../vault/securityDashboard';
+import { Buffer, estimatePasswordEntropyBits } from '@flintlock/core';
 
 const MIN_LENGTH = 8;
 

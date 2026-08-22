@@ -2,6 +2,7 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';

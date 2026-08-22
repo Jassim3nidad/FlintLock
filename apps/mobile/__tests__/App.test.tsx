@@ -10,9 +10,11 @@ jest.mock('../src/clipboard/native');
 
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
+import { configureNativeTestPlatform } from '../src/testUtils/configureNativePlatform';
 import App from '../App';
 
 test('renders correctly', async () => {
+  configureNativeTestPlatform();
   await ReactTestRenderer.act(() => {
     ReactTestRenderer.create(<App />);
   });

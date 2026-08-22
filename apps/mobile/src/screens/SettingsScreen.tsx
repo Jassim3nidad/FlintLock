@@ -10,10 +10,14 @@ import { OptionRow } from '../components/OptionRow';
 import { useTheme, useThemePreference } from '../theme/ThemeProvider';
 import { ThemePreference } from '../preferences/themePreference';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { VaultSettings } from '../storage/schema';
-import { VaultStore } from '../storage/vaultStore';
-import { Buffer, DecryptionError } from '../crypto';
-import { enrollBiometricUnlock, disableBiometricUnlock, isBiometricHardwareAvailable } from '../biometric/biometricVault';
+import {
+  Buffer,
+  DecryptionError,
+  getBiometricKeySource,
+  getCryptoProvider,
+  VaultSettings,
+  VaultStore,
+} from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 const AUTO_LOCK_OPTIONS: VaultSettings['autoLock'][] = ['immediate', '30s', '1m', '5m', '15m', '30m', 'never'];
@@ -33,20 +37,20 @@ export function SettingsScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const updateSettings = (patch: Partial<VaultSettings>): void => {
-    session.vault.updateSettings(patch);
+    session.vault.updateSettings(patch).catch(() => {});
     setSettings({ ...settings, ...patch });
   };
 
   const handleBiometricToggle = async (enabled: boolean): Promise<void> => {
     setBiometricError(null);
     if (!enabled) {
-      await disableBiometricUnlock();
+      await getBiometricKeySource().disable();
       updateSettings({ biometricUnlockEnabled: false });
       return;
     }
 
-    const available = await isBiometricHardwareAvailable();
-    if (!available) {
+    const strength = await getBiometricKeySource().strength();
+    if (strength === 'unsupported') {
       setBiometricError('No biometric hardware is available or enrolled on this device.');
       return;
     }
@@ -64,9 +68,9 @@ export function SettingsScreen() {
       passwordBuffer = Buffer.from(confirmPassword, 'utf8');
       const dek = await VaultStore.verifyPasswordAndGetDek(passwordBuffer);
       try {
-        await enrollBiometricUnlock(dek);
+        await getBiometricKeySource().enroll(dek);
       } finally {
-        dek.fill(0);
+        getCryptoProvider().disposeKey(dek);
       }
       updateSettings({ biometricUnlockEnabled: true });
       setConfirmingPassword(false);

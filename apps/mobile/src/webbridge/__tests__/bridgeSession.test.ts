@@ -1,13 +1,21 @@
 jest.mock('../../crypto/native');
+jest.mock('../../storage/native');
+jest.mock('../../biometric/native');
+jest.mock('../../clipboard/native');
 
+import { resetPlatformForTests } from '@flintlock/core';
+import { fromKeyHandle } from '../../crypto/keyHandleInterop';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 import { BridgeSession } from '../bridgeSession';
 
 beforeEach(() => {
+  configureNativeTestPlatform();
   jest.useFakeTimers();
 });
 
 afterEach(() => {
   jest.useRealTimers();
+  resetPlatformForTests();
 });
 
 function connectedSession(ttlMs?: number): BridgeSession {
@@ -82,17 +90,17 @@ describe('BridgeSession — single-use', () => {
     expect(() => session.qrPayload('192.168.1.1', 1)).toThrow(/torn down/);
   });
 
-  it('zeroes the session key and pairing secret on completion', () => {
+  it('zeroes the session key and pairing secret on completion', async () => {
     const session = connectedSession();
-    const key = session.sessionKey();
+    const key = await session.sessionKey();
     session.requestTransfer('x');
     session.approveTransfer();
     session.complete();
 
-    // The same Buffer object returned earlier is now zeroed in place —
-    // this is the actual memory-hygiene guarantee, not just "can't fetch
-    // a new one".
-    expect(key.every((byte: number) => byte === 0)).toBe(true);
+    // The same underlying bytes returned earlier are now zeroed in place
+    // — this is the actual memory-hygiene guarantee, not just "can't
+    // fetch a new one".
+    expect(fromKeyHandle(key).every((byte: number) => byte === 0)).toBe(true);
   });
 });
 
@@ -173,16 +181,16 @@ describe('BridgeSession — onTeardown unsubscribe', () => {
 });
 
 describe('BridgeSession — sessionKey', () => {
-  it('is deterministic within one session and derived lazily', () => {
+  it('is deterministic within one session and derived lazily', async () => {
     const session = connectedSession();
-    const a = session.sessionKey();
-    const b = session.sessionKey();
-    expect(a.equals(b)).toBe(true);
+    const a = await session.sessionKey();
+    const b = await session.sessionKey();
+    expect(fromKeyHandle(a).equals(fromKeyHandle(b))).toBe(true);
   });
 
-  it('differs between two different sessions', () => {
-    const a = connectedSession().sessionKey();
-    const b = connectedSession().sessionKey();
-    expect(a.equals(b)).toBe(false);
+  it('differs between two different sessions', async () => {
+    const a = await connectedSession().sessionKey();
+    const b = await connectedSession().sessionKey();
+    expect(fromKeyHandle(a).equals(fromKeyHandle(b))).toBe(false);
   });
 });

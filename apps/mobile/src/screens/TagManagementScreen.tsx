@@ -7,8 +7,7 @@ import { Button } from '../components/Button';
 import { TAG_PALETTE } from '../components/tagPalette';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Tag } from '../storage/schema';
-import { deleteTag, listTags, renameTag, updateTagColor } from '../vault/tagService';
+import { deleteTag, listTags, renameTag, Tag, updateTagColor } from '@flintlock/core';
 
 export function TagManagementScreen() {
   const theme = useTheme();
@@ -18,11 +17,11 @@ export function TagManagementScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nameDraft, setNameDraft] = useState('');
 
-  const refresh = useCallback(() => setTags(listTags(session)), [session]);
+  const refresh = useCallback(async () => setTags(await listTags(session)), [session]);
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
+      refresh().catch(() => {});
     }, [refresh])
   );
 
@@ -33,16 +32,18 @@ export function TagManagementScreen() {
 
   const commitRename = (tag: Tag): void => {
     const trimmed = nameDraft.trim();
-    if (trimmed && trimmed !== tag.name) {
-      renameTag(session, tag.id, trimmed);
-      refresh();
-    }
     setEditingId(null);
+    if (trimmed && trimmed !== tag.name) {
+      renameTag(session, tag.id, trimmed)
+        .then(refresh)
+        .catch(() => {});
+    }
   };
 
   const handleColor = (tag: Tag, color: string): void => {
-    updateTagColor(session, tag.id, color);
-    refresh();
+    updateTagColor(session, tag.id, color)
+      .then(refresh)
+      .catch(() => {});
   };
 
   const handleDelete = (tag: Tag): void => {
@@ -52,8 +53,9 @@ export function TagManagementScreen() {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          deleteTag(session, tag.id);
-          refresh();
+          deleteTag(session, tag.id)
+            .then(refresh)
+            .catch(() => {});
         },
       },
     ]);

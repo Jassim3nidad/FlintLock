@@ -1,14 +1,11 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Screen } from '../components/Screen';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { RecordCache } from '../vault/recordCache';
-import { searchCredentials } from '../vault/search';
-import { listTags, TagFilterMode } from '../vault/tagService';
-import { Credential, Tag } from '../storage/schema';
+import { Credential, listTags, RecordCache, searchCredentials, Tag, TagFilterMode } from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<MainStackParamList, 'VaultList'>;
@@ -33,17 +30,18 @@ export function VaultListScreen() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [tagMode, setTagMode] = useState<TagFilterMode>('AND');
 
-  const refresh = useMemo(
-    () => (q: string, tagIds: string[], mode: TagFilterMode) => {
-      setResults(applyTagFilter(searchCredentials(session, cacheRef.current!, q), tagIds, mode));
+  const refresh = useCallback(
+    async (q: string, tagIds: string[], mode: TagFilterMode) => {
+      const matches = await searchCredentials(session, cacheRef.current!, q);
+      setResults(applyTagFilter(matches, tagIds, mode));
     },
     [session]
   );
 
   useFocusEffect(
-    React.useCallback(() => {
-      setAllTags(listTags(session));
-      refresh(query, selectedTagIds, tagMode);
+    useCallback(() => {
+      listTags(session).then(setAllTags).catch(() => {});
+      refresh(query, selectedTagIds, tagMode).catch(() => {});
       // Intentionally not depending on `query`/`selectedTagIds`/`tagMode`
       // here — refetch on focus should reflect whatever's currently
       // selected, not reset it.
@@ -53,7 +51,7 @@ export function VaultListScreen() {
 
   const handleQueryChange = (text: string): void => {
     setQuery(text);
-    refresh(text, selectedTagIds, tagMode);
+    refresh(text, selectedTagIds, tagMode).catch(() => {});
   };
 
   const toggleTag = (tagId: string): void => {
@@ -61,13 +59,13 @@ export function VaultListScreen() {
       ? selectedTagIds.filter((id) => id !== tagId)
       : [...selectedTagIds, tagId];
     setSelectedTagIds(next);
-    refresh(query, next, tagMode);
+    refresh(query, next, tagMode).catch(() => {});
   };
 
   const toggleTagMode = (): void => {
     const next: TagFilterMode = tagMode === 'AND' ? 'OR' : 'AND';
     setTagMode(next);
-    refresh(query, selectedTagIds, next);
+    refresh(query, selectedTagIds, next).catch(() => {});
   };
 
   return (

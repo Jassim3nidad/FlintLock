@@ -6,7 +6,7 @@ import { Screen } from '../components/Screen';
 import { Button } from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { analyzeSecurity, SecurityDashboardReport } from '../vault/securityDashboard';
+import { analyzeSecurity, SecurityDashboardReport } from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Nav = NativeStackNavigationProp<MainStackParamList>;
@@ -40,7 +40,13 @@ export function SecurityDashboardScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setReport(analyzeSecurity(session));
+      let cancelled = false;
+      analyzeSecurity(session).then((r) => {
+        if (!cancelled) setReport(r);
+      });
+      return () => {
+        cancelled = true;
+      };
     }, [session])
   );
 

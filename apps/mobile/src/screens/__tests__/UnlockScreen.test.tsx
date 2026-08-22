@@ -2,20 +2,21 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { Buffer, deriveKek, unwrapDek, dekWrapAad } from '../../crypto';
+import { Buffer, dekWrapAad, deriveKek, getBiometricKeySource, unwrapKey, VaultStore } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
-import { VaultStore } from '../../storage/vaultStore';
-import { enrollBiometricUnlock } from '../../biometric/biometricVault';
 import { withProviders } from '../../testUtils/renderWithProviders';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 import { UnlockScreen } from '../UnlockScreen';
 
 const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
 const PASSWORD = 'correct horse battery staple';
 
 beforeEach(() => {
+  configureNativeTestPlatform();
   vaultStorage.clearAll();
 });
 
@@ -55,14 +56,14 @@ describe('UnlockScreen', () => {
 
   it('shows a biometric-unlock button once biometrics are enabled, and it unlocks the vault', async () => {
     const store = await VaultStore.create(Buffer.from(PASSWORD), FAST_KDF);
-    store.updateSettings({ biometricUnlockEnabled: true });
+    await store.updateSettings({ biometricUnlockEnabled: true });
 
     // Enroll a DEK under the biometric key, the same way the settings
     // screen's "enable biometric unlock" flow will (Phase not yet built
     // — this stands in for it directly via the service layer).
-    const header = JSON.parse(vaultStorage.getString('vault:header')!);
+    const header = JSON.parse(Buffer.from(vaultStorage.getBuffer('vault:header')!).toString('utf8'));
     const kek = await deriveKek(Buffer.from(PASSWORD), header.kdf, Buffer.from(header.salt, 'base64'));
-    const dek = unwrapDek(
+    const dek = await unwrapKey(
       {
         iv: Buffer.from(header.wrappedDek.iv, 'base64'),
         ciphertext: Buffer.from(header.wrappedDek.ciphertext, 'base64'),
@@ -71,7 +72,7 @@ describe('UnlockScreen', () => {
       kek,
       dekWrapAad(header.vaultId, header.kdfParamsVersion)
     );
-    await enrollBiometricUnlock(dek);
+    await getBiometricKeySource().enroll(dek);
 
     await render(withProviders(<UnlockScreen />));
 

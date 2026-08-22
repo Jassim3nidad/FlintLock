@@ -2,17 +2,17 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Buffer } from '../../crypto';
+import { Buffer, Credential, VaultStore } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
-import { VaultStore } from '../../storage/vaultStore';
 import { useVaultSession, VaultSessionProvider } from '../../state/VaultSessionProvider';
 import { ThemeProvider } from '../../theme/ThemeProvider';
-import { Credential } from '../../storage/schema';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 import { CredentialFormScreen } from '../CredentialFormScreen';
 
 const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
@@ -54,6 +54,7 @@ function Bootstrap({ credentialId }: { credentialId?: string }) {
 }
 
 async function renderForm(credentialId?: string) {
+  configureNativeTestPlatform();
   await render(
     <ThemeProvider>
       <VaultSessionProvider>
@@ -67,6 +68,7 @@ async function renderForm(credentialId?: string) {
 }
 
 beforeEach(() => {
+  configureNativeTestPlatform();
   vaultStorage.clearAll();
 });
 
@@ -189,7 +191,7 @@ describe('CredentialFormScreen — edit', () => {
       lastUsedAt: null,
       deletedAt: null,
     };
-    seedStore.putRecord(existing);
+    await seedStore.putRecord(existing);
     seedStore.lock();
 
     await renderForm(existing.id);

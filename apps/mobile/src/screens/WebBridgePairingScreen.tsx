@@ -5,7 +5,7 @@ import { Screen } from '../components/Screen';
 import { Button } from '../components/Button';
 import { TextField } from '../components/TextField';
 import { useTheme } from '../theme/ThemeProvider';
-import { Buffer } from '../crypto';
+import { Buffer } from '@flintlock/core';
 import { BridgeSession, BridgeSessionState } from '../webbridge/bridgeSession';
 import { encodeQrPayload, formatSecretForManualEntry, QrPayload } from '../webbridge/pairing';
 

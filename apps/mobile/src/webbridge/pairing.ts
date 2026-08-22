@@ -1,5 +1,4 @@
-import { Buffer, randomBytes } from '../crypto';
-import { base32Decode, base32Encode } from '../totp/base32';
+import { base32Decode, base32Encode, Buffer, randomBytes } from '@flintlock/core';
 
 /**
  * 256-bit, CSPRNG-generated. Used for both the QR path and the manual-

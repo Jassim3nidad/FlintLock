@@ -7,7 +7,7 @@ jest.mock('../../clipboard/native');
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
 import { Clipboard } from '../../clipboard/native';
-import { Credential } from '../../storage/schema';
+import { Credential } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { CredentialDetailScreen } from '../CredentialDetailScreen';
 
@@ -41,7 +41,7 @@ beforeEach(() => {
 describe('CredentialDetailScreen', () => {
   it('renders the credential fields', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential());
+    await seed.putRecord(makeCredential());
     seed.lock();
 
     await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');
@@ -53,7 +53,7 @@ describe('CredentialDetailScreen', () => {
 
   it('copies the password to the clipboard and shows a countdown', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential());
+    await seed.putRecord(makeCredential());
     seed.lock();
 
     await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');
@@ -68,7 +68,7 @@ describe('CredentialDetailScreen', () => {
 
   it('moving to trash soft-deletes the credential', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential());
+    await seed.putRecord(makeCredential());
     seed.lock();
 
     await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');
@@ -87,9 +87,9 @@ describe('CredentialDetailScreen', () => {
 
   it('shows an attached TOTP code, and none when there is no attached authenticator', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential());
+    await seed.putRecord(makeCredential());
     const now = Date.now();
-    seed.putRecord({
+    await seed.putRecord({
       id: 'totp-1',
       recordType: 'totp',
       credentialId: 'cred-1',
@@ -116,7 +116,7 @@ describe('CredentialDetailScreen', () => {
 
   it('has an "Add 2FA" button that navigates to AddTotp with this credential\'s id', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeCredential());
+    await seed.putRecord(makeCredential());
     seed.lock();
 
     await renderUnlockedScreen(CredentialDetailScreen, { credentialId: 'cred-1' }, 'credential-title');

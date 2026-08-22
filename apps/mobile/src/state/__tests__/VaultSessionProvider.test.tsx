@@ -1,19 +1,22 @@
 jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
+jest.mock('../../clipboard/native');
+jest.mock('../../preferences/native');
 
 import React from 'react';
 import { Text } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { act } from 'react-test-renderer';
-import { Buffer } from '../../crypto';
+import { Buffer, VaultStore } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
-import { VaultStore } from '../../storage/vaultStore';
 import { useVaultSession, VaultSessionProvider } from '../VaultSessionProvider';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 
 const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
 
 beforeEach(() => {
+  configureNativeTestPlatform();
   vaultStorage.clearAll();
 });
 

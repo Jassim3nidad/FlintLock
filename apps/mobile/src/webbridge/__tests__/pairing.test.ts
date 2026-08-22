@@ -1,5 +1,9 @@
 jest.mock('../../crypto/native');
+jest.mock('../../storage/native');
+jest.mock('../../biometric/native');
+jest.mock('../../clipboard/native');
 
+import { resetPlatformForTests } from '@flintlock/core';
 import {
   decodeQrPayload,
   encodeQrPayload,
@@ -8,6 +12,10 @@ import {
   parseManualEntrySecret,
   QrPayload,
 } from '../pairing';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
+
+beforeEach(() => configureNativeTestPlatform());
+afterEach(() => resetPlatformForTests());
 
 describe('generatePairingSecret', () => {
   it('is 256 bits and differs across calls', () => {

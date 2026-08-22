@@ -6,12 +6,12 @@ jest.mock('../../clipboard/native');
 
 import { render, screen, waitFor, fireEvent } from '@testing-library/react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { Buffer } from '../../crypto';
+import { Buffer, VaultStore } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
-import { VaultStore } from '../../storage/vaultStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { VaultSessionProvider } from '../../state/VaultSessionProvider';
 import { RootNavigator } from '../RootNavigator';
+import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
 
 const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
 
@@ -28,6 +28,7 @@ async function renderRoot() {
 }
 
 beforeEach(() => {
+  configureNativeTestPlatform();
   vaultStorage.clearAll();
 });
 

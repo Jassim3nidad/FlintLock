@@ -7,8 +7,7 @@ import { TextField } from '../components/TextField';
 import { Button } from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { createTotpEntryFromOtpauthUri, createTotpEntryManually } from '../vault/totpService';
-import { OtpAlgorithm, OtpDigits } from '../totp/hotp';
+import { createTotpEntryFromOtpauthUri, createTotpEntryManually, OtpAlgorithm, OtpDigits } from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Route = NativeStackScreenProps<MainStackParamList, 'AddTotp'>['route'];
@@ -65,7 +64,7 @@ export function AddTotpScreen() {
     setError(null);
     setSaving(true);
     try {
-      createTotpEntryManually(session, {
+      await createTotpEntryManually(session, {
         credentialId,
         issuer,
         account,
@@ -88,7 +87,7 @@ export function AddTotpScreen() {
     setError(null);
     setSaving(true);
     try {
-      createTotpEntryFromOtpauthUri(session, uri, credentialId);
+      await createTotpEntryFromOtpauthUri(session, uri, credentialId);
       navigation.goBack();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not parse this code');

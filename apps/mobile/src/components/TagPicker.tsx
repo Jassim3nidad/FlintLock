@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Tag } from '../storage/schema';
-import { createTag, listTags } from '../vault/tagService';
+import { createTag, listTags, Tag } from '@flintlock/core';
 import { randomTagColor } from './tagPalette';
 
 interface TagPickerProps {
@@ -18,7 +17,13 @@ export function TagPicker({ selectedTagIds, onChange }: TagPickerProps) {
   const [query, setQuery] = useState('');
 
   useEffect(() => {
-    setAllTags(listTags(session));
+    let cancelled = false;
+    listTags(session).then((tags) => {
+      if (!cancelled) setAllTags(tags);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [session]);
 
   const selectedTags = selectedTagIds.map((id) => allTags.find((t) => t.id === id)).filter((t): t is Tag => t !== undefined);
@@ -39,10 +44,13 @@ export function TagPicker({ selectedTagIds, onChange }: TagPickerProps) {
 
   const handleCreateNew = (): void => {
     if (!trimmedQuery) return;
-    const tag = createTag(session, trimmedQuery, randomTagColor());
-    setAllTags((prev) => [...prev, tag]);
-    onChange([...selectedTagIds, tag.id]);
-    setQuery('');
+    createTag(session, trimmedQuery, randomTagColor())
+      .then((tag) => {
+        setAllTags((prev) => [...prev, tag]);
+        onChange([...selectedTagIds, tag.id]);
+        setQuery('');
+      })
+      .catch(() => {});
   };
 
   return (

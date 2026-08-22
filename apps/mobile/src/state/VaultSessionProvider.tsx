@@ -1,9 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { Buffer, KdfParams } from '../crypto';
-import { VaultStore } from '../storage/vaultStore';
-import { UnlockSession } from '../unlock/session';
-import { unlockWithBiometrics as biometricUnlock } from '../biometric/biometricVault';
+import { Buffer, getBiometricKeySource, KdfParams, UnlockSession, VaultStore } from '@flintlock/core';
 
 interface VaultSessionContextValue {
   session: UnlockSession;
@@ -13,7 +10,7 @@ interface VaultSessionContextValue {
   unlockWithPassword: (password: Buffer) => Promise<void>;
   unlockWithBiometrics: () => Promise<boolean>;
   lock: () => void;
-  refreshVaultExists: () => void;
+  refreshVaultExists: () => Promise<void>;
 }
 
 const VaultSessionContext = createContext<VaultSessionContextValue | null>(null);
@@ -24,7 +21,11 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
   const session = sessionRef.current;
 
   const [isUnlocked, setIsUnlocked] = useState(session.isUnlocked);
-  const [vaultExists, setVaultExists] = useState(() => VaultStore.exists());
+  const [vaultExists, setVaultExists] = useState(false);
+
+  useEffect(() => {
+    VaultStore.exists().then(setVaultExists);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = session.onLock(() => setIsUnlocked(false));
@@ -45,7 +46,7 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
       session,
       isUnlocked,
       vaultExists,
-      refreshVaultExists: () => setVaultExists(VaultStore.exists()),
+      refreshVaultExists: async () => setVaultExists(await VaultStore.exists()),
       createVault: async (password, kdfParams) => {
         await VaultStore.create(password, kdfParams);
         setVaultExists(true);
@@ -57,9 +58,9 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
         setIsUnlocked(true);
       },
       unlockWithBiometrics: async () => {
-        const dek = await biometricUnlock();
+        const dek = await getBiometricKeySource().unlock();
         if (!dek) return false;
-        session.unlockWithDek(dek);
+        await session.unlockWithDek(dek);
         setIsUnlocked(true);
         return true;
       },

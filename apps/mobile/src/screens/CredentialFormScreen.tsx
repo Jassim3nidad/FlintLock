@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,9 +8,7 @@ import { Button } from '../components/Button';
 import { TagPicker } from '../components/TagPicker';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { createCredential, getCredential, updateCredential } from '../vault/credentialService';
-import { generatePassword } from '../generator/passwordGenerator';
-import { CustomField, CustomFieldType } from '../storage/schema';
+import { createCredential, CustomField, CustomFieldType, generatePassword, getCredential, updateCredential } from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Route = NativeStackScreenProps<MainStackParamList, 'CredentialForm'>['route'];
@@ -24,18 +22,47 @@ export function CredentialFormScreen() {
   const route = useRoute<Route>();
   const { session } = useVaultSession();
   const credentialId = route.params?.credentialId;
-  const existing = credentialId ? getCredential(session, credentialId) : undefined;
+  const isEditing = credentialId !== undefined;
 
-  const [title, setTitle] = useState(existing?.title ?? '');
-  const [username, setUsername] = useState(existing?.username ?? '');
-  const [password, setPassword] = useState(existing?.password ?? '');
-  const [url, setUrl] = useState(existing?.urls[0] ?? '');
-  const [notes, setNotes] = useState(existing?.notes ?? '');
-  const [favorite, setFavorite] = useState(existing?.favorite ?? false);
-  const [tagIds, setTagIds] = useState<string[]>(existing?.tagIds ?? []);
-  const [customFields, setCustomFields] = useState<CustomField[]>(existing?.customFields ?? []);
+  const [loaded, setLoaded] = useState(!isEditing);
+  const [existingId, setExistingId] = useState<string | undefined>(undefined);
+  const [title, setTitle] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [url, setUrl] = useState('');
+  const [notes, setNotes] = useState('');
+  const [favorite, setFavorite] = useState(false);
+  const [tagIds, setTagIds] = useState<string[]>([]);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing || !credentialId) {
+      setLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const cred = await getCredential(session, credentialId);
+      if (cancelled) return;
+      if (cred) {
+        setExistingId(cred.id);
+        setTitle(cred.title);
+        setUsername(cred.username);
+        setPassword(cred.password);
+        setUrl(cred.urls[0] ?? '');
+        setNotes(cred.notes);
+        setFavorite(cred.favorite);
+        setTagIds(cred.tagIds);
+        setCustomFields(cred.customFields);
+      }
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session, credentialId, isEditing]);
 
   const addCustomField = (): void => {
     setCustomFields((fields) => [...fields, { key: '', value: '', type: 'text' }]);
@@ -78,10 +105,10 @@ export function CredentialFormScreen() {
         tagIds,
         customFields: customFields.filter((f) => f.key.trim().length > 0),
       };
-      if (existing) {
-        updateCredential(session, existing.id, fields);
+      if (existingId) {
+        await updateCredential(session, existingId, fields);
       } else {
-        createCredential(session, fields);
+        await createCredential(session, fields);
       }
       navigation.goBack();
     } catch (e) {
@@ -91,10 +118,12 @@ export function CredentialFormScreen() {
     }
   };
 
+  if (!loaded) return null;
+
   return (
     <Screen scroll>
       <Text style={[styles.title, { color: theme.colors.textPrimary, fontSize: theme.typography.title.fontSize }]}>
-        {existing ? 'Edit credential' : 'New credential'}
+        {existingId ? 'Edit credential' : 'New credential'}
       </Text>
 
       <TextField label="Title" testID="title-input" value={title} onChangeText={setTitle} />

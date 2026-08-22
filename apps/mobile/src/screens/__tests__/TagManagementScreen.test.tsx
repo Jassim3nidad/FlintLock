@@ -2,11 +2,12 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { Alert } from 'react-native';
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { Credential, Tag } from '../../storage/schema';
+import { Credential, Tag } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { TagManagementScreen } from '../TagManagementScreen';
 import { TAG_PALETTE } from '../../components/tagPalette';
@@ -51,7 +52,7 @@ describe('TagManagementScreen', () => {
 
   it('lists existing tags', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work'));
+    await seed.putRecord(makeTag('work', 'Work'));
     seed.lock();
 
     await renderUnlockedScreen(TagManagementScreen, undefined, 'tag-row-work');
@@ -60,7 +61,7 @@ describe('TagManagementScreen', () => {
 
   it('renames a tag', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work'));
+    await seed.putRecord(makeTag('work', 'Work'));
     seed.lock();
 
     await renderUnlockedScreen(TagManagementScreen, undefined, 'tag-row-work');
@@ -75,7 +76,7 @@ describe('TagManagementScreen', () => {
 
   it('recolors a tag', async () => {
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work', TAG_PALETTE[0]));
+    await seed.putRecord(makeTag('work', 'Work', TAG_PALETTE[0]));
     seed.lock();
 
     const newColor = TAG_PALETTE[1]!;
@@ -94,8 +95,8 @@ describe('TagManagementScreen', () => {
     });
 
     const seed = await seedVault();
-    seed.putRecord(makeTag('work', 'Work'));
-    seed.putRecord(makeCredential({ id: 'cred-1', tagIds: ['work'] }));
+    await seed.putRecord(makeTag('work', 'Work'));
+    await seed.putRecord(makeCredential({ id: 'cred-1', tagIds: ['work'] }));
     seed.lock();
 
     await renderUnlockedScreen(TagManagementScreen, undefined, 'tag-row-work');

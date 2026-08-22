@@ -2,15 +2,13 @@ jest.mock('../../crypto/native');
 jest.mock('../../storage/native');
 jest.mock('../../biometric/native');
 jest.mock('../../preferences/native');
+jest.mock('../../clipboard/native');
 
 import { screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { vaultStorage } from '../../storage/native';
-import { generateTotp } from '../../totp/totp';
-import { generateHotp } from '../../totp/hotp';
-import { base32Decode } from '../../totp/base32';
+import { base32Decode, generateHotp, generateTotp, TotpEntry } from '@flintlock/core';
 import { renderUnlockedScreen, seedVault } from '../../testUtils/renderUnlockedScreen';
 import { TotpCodeDisplay } from '../TotpCodeDisplay';
-import { TotpEntry } from '../../storage/schema';
 
 const SECRET = 'JBSWY3DPEHPK3PXP';
 
@@ -48,7 +46,7 @@ describe('TotpCodeDisplay — totp', () => {
   it('shows the correct current code and countdown', async () => {
     const seed = await seedVault();
     const entry = makeTotpEntry();
-    seed.putRecord(entry);
+    await seed.putRecord(entry);
     seed.lock();
 
     function Wrapper() {
@@ -56,7 +54,7 @@ describe('TotpCodeDisplay — totp', () => {
     }
     await renderUnlockedScreen(Wrapper, undefined, `totp-code-${entry.id}`);
 
-    const expected = generateTotp(base32Decode(SECRET), { algorithm: 'SHA1', digits: 6, period: 30 });
+    const expected = await generateTotp(base32Decode(SECRET), { algorithm: 'SHA1', digits: 6, period: 30 });
     const displayed = screen.getByTestId(`totp-code-text-${entry.id}`).props.children.replace(/\s/g, '');
     expect(displayed).toBe(expected);
     expect(screen.getByTestId(`totp-countdown-${entry.id}`)).toBeTruthy();
@@ -65,7 +63,7 @@ describe('TotpCodeDisplay — totp', () => {
   it('calls onCopy with the raw (unformatted) code when tapped', async () => {
     const seed = await seedVault();
     const entry = makeTotpEntry();
-    seed.putRecord(entry);
+    await seed.putRecord(entry);
     seed.lock();
 
     const onCopy = jest.fn();
@@ -84,7 +82,7 @@ describe('TotpCodeDisplay — hotp', () => {
   it('shows a placeholder until Generate is tapped, then the correct code for the current counter', async () => {
     const seed = await seedVault();
     const entry = makeTotpEntry({ mode: 'hotp', counter: 5, period: 30 });
-    seed.putRecord(entry);
+    await seed.putRecord(entry);
     seed.lock();
 
     function Wrapper() {
@@ -96,7 +94,7 @@ describe('TotpCodeDisplay — hotp', () => {
 
     await fireEvent.press(screen.getByTestId(`totp-generate-${entry.id}`));
 
-    const expected = generateHotp(base32Decode(SECRET), 5, { algorithm: 'SHA1', digits: 6 });
+    const expected = await generateHotp(base32Decode(SECRET), 5, { algorithm: 'SHA1', digits: 6 });
     await waitFor(() => {
       const displayed = screen.getByTestId(`totp-code-text-${entry.id}`).props.children.replace(/\s/g, '');
       expect(displayed).toBe(expected);
@@ -106,7 +104,7 @@ describe('TotpCodeDisplay — hotp', () => {
   it('does not advance the counter just by rendering — only Generate does', async () => {
     const seed = await seedVault();
     const entry = makeTotpEntry({ mode: 'hotp', counter: 5, period: 30 });
-    seed.putRecord(entry);
+    await seed.putRecord(entry);
 
     function Wrapper() {
       return <TotpCodeDisplay entry={entry} onCopy={() => {}} />;
@@ -114,6 +112,6 @@ describe('TotpCodeDisplay — hotp', () => {
     await renderUnlockedScreen(Wrapper, undefined, `totp-generate-${entry.id}`);
     jest.advanceTimersByTime(5000); // would advance a totp-style ticking code, should be a no-op for hotp
 
-    expect(seed.getRecord(entry.id)).toMatchObject({ counter: 5 });
+    expect(await seed.getRecord(entry.id)).toMatchObject({ counter: 5 });
   });
 });

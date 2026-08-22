@@ -2,8 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { TotpEntry } from '../storage/schema';
-import { getCurrentCode, getTotpEntry } from '../vault/totpService';
+import { CurrentCode, getCurrentCode, getTotpEntry, TotpEntry } from '@flintlock/core';
 
 interface TotpCodeDisplayProps {
   entry: TotpEntry;
@@ -22,6 +21,7 @@ export function TotpCodeDisplay({ entry, onCopy }: TotpCodeDisplayProps) {
   const theme = useTheme();
   const { session } = useVaultSession();
   const [nowSeconds, setNowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+  const [totpCode, setTotpCode] = useState<CurrentCode | null>(null);
   const [hotpCode, setHotpCode] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,8 +30,20 @@ export function TotpCodeDisplay({ entry, onCopy }: TotpCodeDisplayProps) {
     return () => clearInterval(id);
   }, [entry.mode]);
 
+  useEffect(() => {
+    if (entry.mode !== 'totp') return undefined;
+    let cancelled = false;
+    getCurrentCode(session, entry, nowSeconds).then((result) => {
+      if (!cancelled) setTotpCode(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, entry, nowSeconds]);
+
   if (entry.mode === 'totp') {
-    const { code, secondsRemaining } = getCurrentCode(session, entry, nowSeconds);
+    if (!totpCode) return null;
+    const { code, secondsRemaining } = totpCode;
     const fraction = secondsRemaining !== null ? secondsRemaining / entry.period : 0;
     return (
       <View style={styles.container}>
@@ -63,9 +75,11 @@ export function TotpCodeDisplay({ entry, onCopy }: TotpCodeDisplayProps) {
   const handleGenerate = (): void => {
     // Re-fetch: the entry prop may be stale if a previous generation
     // already advanced the counter elsewhere.
-    const latest = getTotpEntry(session, entry.id) ?? entry;
-    const { code } = getCurrentCode(session, latest);
-    setHotpCode(code);
+    (async () => {
+      const latest = (await getTotpEntry(session, entry.id)) ?? entry;
+      const { code } = await getCurrentCode(session, latest);
+      setHotpCode(code);
+    })().catch(() => {});
   };
 
   return (
