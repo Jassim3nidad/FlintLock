@@ -54,6 +54,14 @@ describe('nativeSecureStore — legacy string-encoded vault migration', () => {
   // is that a completely correct password fails to open with a
   // DecryptionError indistinguishable from a wrong one. These tests
   // reproduce that exact on-disk shape rather than trusting a mock of it.
+  //
+  // What these tests CANNOT prove: that real MMKV's getBuffer() actually
+  // returns undefined for a string-written key the way the Jest mock
+  // does. That assumption is the one thing the shim depends on that
+  // only a physical device can confirm — see docs/CRYPTO.md's device
+  // verification checklist. Treat everything below as "this file's
+  // logic is correct given that assumption," not as proof the
+  // assumption holds.
 
   it('getItem transparently reads a legacy string-encoded value and migrates it to bytes', async () => {
     // Reproduce the pre-migration write path directly — the old
@@ -67,6 +75,31 @@ describe('nativeSecureStore — legacy string-encoded vault migration', () => {
 
     // Migrated in place: a second read no longer needs the string fallback.
     expect(vaultStorage.getBuffer('legacy-key')).toBeDefined();
+  });
+
+  it('replaces the legacy value rather than shadowing it, and warns exactly once across two reads', async () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      vaultStorage.set('legacy-key', JSON.stringify({ n: 1 }));
+
+      const first = await nativeSecureStore.getItem('legacy-key');
+      expect(JSON.parse(first!.toString('utf8'))).toEqual({ n: 1 });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+
+      // The old string-typed value must be gone, not merely shadowed by
+      // a co-existing bytes-typed one under the same key — MMKV only
+      // ever holds one representation per key, but this asserts that
+      // rather than assuming it.
+      expect(vaultStorage.getString('legacy-key')).toBeUndefined();
+
+      // Second read takes the bytes fast path — no further migration,
+      // no further warning.
+      const second = await nativeSecureStore.getItem('legacy-key');
+      expect(JSON.parse(second!.toString('utf8'))).toEqual({ n: 1 });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('opens a vault whose header and index were written in the legacy string format, and migrates them in place', async () => {

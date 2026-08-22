@@ -34,6 +34,18 @@ export const nativeSecureStore: SecureStore = {
     // write it back as bytes so this path is only ever taken once per
     // key — the vault is fully migrated in place, silently, on next
     // successful unlock.
+    //
+    // UNVERIFIED ASSUMPTION, pending the on-device upgrade pass: that
+    // real MMKV's getBuffer() actually returns undefined for a
+    // string-written key, the way the Jest mock does. If real MMKV
+    // instead hands back that string's UTF-8 bytes, this fallback never
+    // fires and the original bug reproduces on hardware with green
+    // tests claiming it's fixed. The only test that can settle this is
+    // installing a pre-migration build, creating a vault, then
+    // installing this build over it and unlocking — see
+    // docs/CRYPTO.md's device-pass checklist. Do not treat the tests
+    // below as proof of the real-MMKV behavior; they only prove this
+    // file's own logic once that behavior is confirmed.
     const legacyString = vaultStorage.getString(key);
     if (legacyString === undefined) return undefined;
 

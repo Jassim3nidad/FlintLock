@@ -26,6 +26,13 @@ import { PBKDF2_SHA256_VECTORS } from './vectors/pbkdf2.vectors';
  * consistency of the wrapper logic (parameter marshalling, AAD
  * handling, IV/tag plumbing), not agreement between independent crypto
  * implementations.
+ *
+ * Status: the one real cross-implementation check that does exist is
+ * export/__tests__/deviceCrossImplementation.test.ts, currently skipped
+ * pending fixture data from the device verification pass (see
+ * docs/CRYPTO.md) — it's narrower than this suite (one .flbx file, not
+ * every primitive), but it's the first artifact this project has ever
+ * decrypted that a real native binding, not Node's `crypto`, produced.
  */
 export function describeCryptoProviderConformance(
   name: string,
