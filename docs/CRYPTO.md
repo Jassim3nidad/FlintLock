@@ -101,6 +101,19 @@ The shim assumes real MMKV's `getBuffer()` returns `undefined` for a key that wa
 
 See `packages/core/src/export/__tests__/deviceCrossImplementation.test.ts` for the exact steps and the fixture this test consumes once populated — it decrypts a `.flbx` file actually produced by react-native-quick-crypto's native binding using packages/core's Node-backed reference provider, which is the first real cross-implementation check the project has had (everything else currently checks Node's crypto against itself).
 
+### 3. iOS: device-lock-while-backgrounded, under `NSFileProtectionCompleteUnlessOpen`
+
+`AppDelegate.swift`'s `hardenMmkvDirectory()` deliberately chose `.completeUnlessOpen` over `.complete` on the theory that MMKV keeps its backing file's mapping open for the app's whole lifetime, so an already-open mapping should keep working across an ordinary lock — only a *new* open would be denied until unlock. That reasoning is unverified without a real device; specifically unverified is whether MMKV's read/write calls silently succeed, silently fail, or crash the app when exercised while the device is locked and the app is backgrounded (not killed).
+
+**Steps:**
+1. Install a build with `hardenMmkvDirectory()` in place. Unlock the vault (master password or biometrics), so MMKV's file is open with an active mapping.
+2. Background the app (home button / swipe up — do **not** kill it), then lock the device (power button).
+3. While still backgrounded-and-locked, trigger something that would cause a vault write if the app were foregrounded and unaffected by lock state — e.g., wait through an auto-lock timeout (`VaultSessionProvider`'s `AppState` handler calls `session.handleAppBackgrounded()` on the transition to background, which calls `VaultStore.lock()`, which writes nothing itself but does call `disposeKey()` — confirm this doesn't touch the MMKV file while locked in a way that errors) and separately confirm any settings/state write genuinely queued around the lock moment doesn't throw or corrupt the store.
+4. Unlock the device, foreground the app, and confirm the vault is still intact and openable with the correct master password — no corruption, no crash log, no silently-dropped write.
+5. Repeat with a **cold launch while the device is still locked** (kill the app first, lock the device, then launch the app from a locked home screen if the OS allows it, or launch immediately after locking): this is the case `.completeUnlessOpen` is expected to correctly *deny* — confirm the app fails closed (shows the unlock screen or a clear error) rather than crashing outright.
+
+If step 3 or 4 surfaces a crash, a silently-dropped write, or file corruption, that's a real defect in the file-protection-class choice, not a false alarm — see `SECURITY.md`'s "iOS file protection" bullet for the reasoning this test is meant to confirm or refute.
+
 ## What this doesn't cover yet
 
 Biometric unlock (native path is implemented; WebAuthn PRF/largeBlob for web is pending real-hardware testing), storage layer beyond the migration shim above, and Web Bridge each have their own key material and are documented separately.
