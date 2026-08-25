@@ -2,9 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    tags-ignore:
+      - '**'
   pull_request:
-    branches: [main]
+    branches: [master]
+
+# A branch with an open PR fires both `push` and `pull_request` for the
+# same commits — this doesn't eliminate that (push and pull_request use
+# different refs, so they can't be coalesced into one run), but it does
+# cancel a stale run for the same ref when a new one starts, so rapid
+# pushes to one branch don't queue up redundant runs behind each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   secret-scan:

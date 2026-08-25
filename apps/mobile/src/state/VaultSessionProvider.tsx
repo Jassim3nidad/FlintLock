@@ -41,6 +41,25 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
     return () => subscription.remove();
   }, [session]);
 
+  /**
+   * Unmounting this provider drops React's *reference* to `session`, but
+   * `UnlockSession` is a plain object whose auto-lock timer is a real
+   * `setTimeout` closed over `this` — nothing about a component unmount
+   * cancels that on its own. Without this, an unlocked session that
+   * outlives its provider (this component being torn down and
+   * remounted, a test harness rendering a fresh provider per test, ...)
+   * leaves a live timer — and the DEK/VaultStore it eventually locks —
+   * reachable only through that timer's closure, not through anything
+   * this render tree still holds. `session.lock()` is idempotent and
+   * safe to call unconditionally (a no-op if already locked), so this
+   * doesn't need to check `isUnlocked` first.
+   */
+  useEffect(() => {
+    return () => {
+      session.lock();
+    };
+  }, [session]);
+
   const value = useMemo<VaultSessionContextValue>(
     () => ({
       session,
