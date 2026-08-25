@@ -77,7 +77,16 @@ describe('nativeSecureStore — legacy string-encoded vault migration', () => {
     expect(vaultStorage.getBuffer('legacy-key')).toBeDefined();
   });
 
-  it('replaces the legacy value rather than shadowing it, and warns exactly once across two reads', async () => {
+  // Scope of "once" here: once per key, on repeated reads of that SAME
+  // key — not a global "only the first migrated key in the whole vault
+  // ever warns" guarantee. There's no shared flag; the fallback is
+  // purely per-key (getBuffer succeeds → skip it entirely from then
+  // on). A vault with N legacy keys warns N times total, once each,
+  // the first time each key is read — for the real vault, that's
+  // `vault:header` (read eagerly by open()) and `vault:index` (read
+  // lazily by listIndex()), so expect exactly two warnings total across
+  // the device upgrade pass, not one.
+  it('replaces the legacy value rather than shadowing it, and does not re-warn on a second read of the same key', async () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       vaultStorage.set('legacy-key', JSON.stringify({ n: 1 }));
@@ -92,8 +101,8 @@ describe('nativeSecureStore — legacy string-encoded vault migration', () => {
       // rather than assuming it.
       expect(vaultStorage.getString('legacy-key')).toBeUndefined();
 
-      // Second read takes the bytes fast path — no further migration,
-      // no further warning.
+      // Second read of the SAME key takes the bytes fast path — no
+      // further migration, no further warning for THIS key.
       const second = await nativeSecureStore.getItem('legacy-key');
       expect(JSON.parse(second!.toString('utf8'))).toEqual({ n: 1 });
       expect(warnSpy).toHaveBeenCalledTimes(1);

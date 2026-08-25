@@ -16,10 +16,16 @@
 export const DEVICE_EXPORTED_FLBX_BASE64: string | null = null;
 
 /**
- * The master password used for the on-device export that produced the
- * fixture above — supplied alongside the pulled file, not invented here.
+ * The master password for the device-pass test vault, pinned here in
+ * advance rather than chosen freely and reported back — a typo in a
+ * password that's only ever spoken, never written down, would be
+ * indistinguishable from a real cross-implementation crypto mismatch,
+ * which is exactly the failure mode this whole test exists to catch.
+ * Set up the walkthrough vault (docs/CRYPTO.md's device checklist,
+ * step 1) with this exact master password, and use it again verbatim
+ * for the step 7 .flbx export.
  */
-export const DEVICE_EXPORT_PASSWORD: string | null = null;
+export const DEVICE_EXPORT_PASSWORD = 'device-crosscheck-Pw1!';
 
 /**
  * What the on-device credential + TOTP entry should contain, matched by
@@ -28,10 +34,15 @@ export const DEVICE_EXPORT_PASSWORD: string | null = null;
  * device pass). Update this to whatever was actually entered on-device
  * if it ends up differing from the checklist's prescribed values.
  */
+// Deliberately not a near-miss of DEVICE_EXPORT_PASSWORD above (e.g. a
+// same-string-different-casing variant) — the two are visually distinct
+// on purpose, since a transcription slip between "the vault's master
+// password" and "this credential's stored password" is exactly the
+// kind of typo this whole exercise is trying to keep out of the loop.
 export const DEVICE_EXPORT_EXPECTED_CREDENTIAL = {
   title: 'Device Crosscheck',
   username: 'device-crosscheck',
-  password: 'DeviceCrosscheck-Pw1!',
+  password: 'StoredCredentialValue789#',
   urls: ['https://example.com/device-crosscheck'],
 };
 

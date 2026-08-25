@@ -87,12 +87,15 @@ Nothing above involving react-native-quick-crypto's **actual native binding** �
 
 The shim assumes real MMKV's `getBuffer()` returns `undefined` for a key that was written via `set(key, string)`, the way the Jest mock does. If real MMKV instead returns that string's UTF-8 bytes, the fallback never fires and a pre-migration vault fails to open with a `DecryptionError` indistinguishable from a wrong password — the exact bug the shim exists to fix, now hidden behind tests that only prove the *mocked* behavior.
 
+**This test installs a new build over a vault it might not be able to open — always have a recovery path that doesn't depend on the thing under test.**
+
 **Steps:**
 1. Build and install the pre-migration app: `git checkout pre-monorepo-native`, then `npm install && npx react-native run-android` (this predates the workspace split, so it's a plain single-package RN app — no `apps/mobile` prefix).
 2. Create a vault, add 2-3 credentials, enable biometric unlock if you want to also check that setting survives.
-3. Check out the current branch (`git checkout monorepo-migration`), install over the same device (`cd apps/mobile && npx react-native run-android` — this reinstalls over the existing app rather than uninstalling first, so the vault persists) without uninstalling the app first.
-4. Unlock with the same password. **This must succeed.** Confirm the credentials added in step 2 are all present and correct.
-5. Look at logcat (`adb logcat | grep flintlock`) for the `[flintlock] Migrating legacy string-encoded storage key ...` warning — it should appear exactly twice (once for `vault:header`, once for `vault:index`, the latter on first screen that lists credentials) on this first unlock, and never again on subsequent unlocks.
+3. **Step 0a — export an escape hatch before going any further.** From this same pre-migration build, export a `.flbx` backup of the vault and save it somewhere off-device (it's the one artifact this whole test can't corrupt, since it's produced *before* the build under test ever touches the vault). If the migration shim turns out to be broken and the vault won't open after step 5 below, this file — not the vault, not the shim, not anything this upgrade path depends on — is the recovery path. Skipping this step means a broken shim costs you the vault, not just the test.
+4. Check out the current branch (`git checkout monorepo-migration`), install over the same device (`cd apps/mobile && npx react-native run-android` — this reinstalls over the existing app rather than uninstalling first, so the vault persists) without uninstalling the app first.
+5. Unlock with the same password. **This must succeed.** Confirm the credentials added in step 2 are all present and correct. If it fails, do not troubleshoot in place — restore from the step 0a backup on a clean install, then report the failure.
+6. Look at logcat (`adb logcat | grep flintlock`) for the `[flintlock] Migrating legacy string-encoded storage key ...` warning. Expect it **twice**: once for `vault:header` (read eagerly by `open()`) and once for `vault:index` (read lazily, the first time something lists credentials) — the fallback is per-key with no shared "only once ever" flag, so N legacy keys warn N times total, never again after each key's own first successful read.
 
 ### 2. Cross-implementation `.flbx` parity (real native binding vs. Node reference provider)
 
