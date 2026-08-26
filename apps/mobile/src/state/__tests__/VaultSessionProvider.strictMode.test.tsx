@@ -12,6 +12,7 @@ import { Buffer } from '@flintlock/core';
 import { vaultStorage } from '../../storage/native';
 import { useVaultSession, VaultSessionProvider } from '../VaultSessionProvider';
 import { configureNativeTestPlatform } from '../../testUtils/configureNativePlatform';
+import { fromKeyHandle } from '../../crypto/keyHandleInterop';
 
 const FAST_KDF = { kdf: 'pbkdf2' as const, iterations: 100, digest: 'sha256' as const };
 
@@ -34,6 +35,16 @@ beforeEach(() => {
  * re-renders). Nothing has had a chance to unlock anything by the time that
  * synthetic cycle completes. This test exercises that directly rather than
  * relying on the reasoning alone.
+ *
+ * The second test below asserts the DEK's actual bytes are zeroed on
+ * unmount — via `VaultStore.unsafeDekForTests()` + `fromKeyHandle()`, the
+ * same pattern `bridgeSession.test.ts`'s "zeroes the session key" test
+ * uses — not just that `isUnlocked` flips to `false`. `isUnlocked` is a
+ * state flag (`this.store !== null`) that `lock()` always sets regardless
+ * of whether `disposeKey()` actually ran; a test that only checked the
+ * flag would keep passing even with `disposeKey()` deleted from
+ * `VaultStore.lock()` entirely — confirmed by deliberately deleting it and
+ * watching only the byte-level assertion fail.
  */
 let capturedCtx: ReturnType<typeof useVaultSession> | undefined;
 function Capture() {
@@ -90,6 +101,18 @@ describe('VaultSessionProvider under React.StrictMode', () => {
     const oldSession = capturedCtx!.session;
     expect(oldSession.isUnlocked).toBe(true);
 
+    // Captured *before* teardown, deliberately, for the same reason
+    // bridgeSession.test.ts's "zeroes the session key" test captures its
+    // key first: isUnlocked() is a state flag (this.store !== null on
+    // UnlockSession) that lock() always flips regardless of whether
+    // disposeKey() actually ran — asserting only that flag would keep
+    // passing even if disposeKey() were deleted from VaultStore.lock()
+    // entirely. The actual guarantee this test exists to prove is that
+    // the DEK's *bytes* get zeroed, not just that a reference becomes
+    // unreachable.
+    const dekHandle = oldSession.vault.unsafeDekForTests();
+    expect(dekHandle).not.toBeNull();
+
     // A real unmount — what Fast Refresh does when it decides a component
     // can't be hot-patched in place and remounts the tree instead.
     // useEffect cleanups are *passive* effects: React does not guarantee
@@ -103,11 +126,13 @@ describe('VaultSessionProvider under React.StrictMode', () => {
       view.unmount();
     });
 
-    // The fix's whole point: the *old*, now-orphaned session is locked
-    // (its DEK disposed) rather than left dangling with a live timer and
-    // a live key, even though nothing in the React tree references it
-    // anymore.
+    // The state-flag check (kept, since it's still a real, separate
+    // observable behavior)...
     expect(oldSession.isUnlocked).toBe(false);
+    // ...and the actual memory-hygiene guarantee: the same underlying
+    // bytes captured above are now zeroed in place, not just replaced by
+    // a new null reference.
+    expect(fromKeyHandle(dekHandle!).every((byte: number) => byte === 0)).toBe(true);
 
     // A fresh mount afterward (what the developer sees post-refresh) is a
     // brand-new provider with its own brand-new session — this was already

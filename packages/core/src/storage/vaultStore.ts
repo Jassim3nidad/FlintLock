@@ -228,6 +228,25 @@ export class VaultStore {
     return this.dek !== null;
   }
 
+  /**
+   * Exposes the current DEK's KeyHandle reference — never its bytes; that
+   * still requires the platform's own test-only unwrap (e.g.
+   * `unsafeKeyHandleBytesForTests` in `../testing/nodeCryptoProvider.ts`,
+   * or `fromKeyHandle` in a concrete platform's `keyHandleInterop.ts`).
+   * Test-only: production code never needs the DEK itself, only what it
+   * can decrypt through `getRecord`/`putRecord`. Exists so a test can
+   * capture the handle *before* `lock()` and assert its underlying bytes
+   * are actually zeroed *after* — the same pattern `BridgeSession`'s own
+   * tests use for its session key — rather than only asserting
+   * `isUnlocked()` becomes `false`, which is a state flag `lock()` always
+   * flips regardless of whether `disposeKey()` was ever reached; a test
+   * that only checks the flag would keep passing if `disposeKey()` were
+   * deleted from `lock()` entirely.
+   */
+  unsafeDekForTests(): KeyHandle | null {
+    return this.dek;
+  }
+
   private requireDek(): KeyHandle {
     if (!this.dek) throw new Error('Vault is locked');
     return this.dek;
