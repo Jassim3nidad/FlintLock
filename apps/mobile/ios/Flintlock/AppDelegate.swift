@@ -65,11 +65,37 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// access lazy and catches what *is* catchable, as defense in depth,
   /// not as the primary guard.
   ///
+  /// **No bounded timeout that falls through to starting React Native
+  /// anyway — deliberately.** An earlier version of this guard considered
+  /// exactly that ("wait N seconds, then start regardless"), but that
+  /// would reintroduce the same crash risk this guard exists to remove:
+  /// if the timeout fires while data is *still* unavailable, React Native
+  /// still starts, `VaultSessionProvider` still touches storage almost
+  /// immediately, and the risky open still isn't guaranteed to fail as a
+  /// catchable JS exception — a bounded wait doesn't bound the *risk*,
+  /// only the *time before hitting it*. Instead: never leave the launch
+  /// screen frozen with no UI and no way out (a real prior gap in this
+  /// guard) by showing a minimal *native* "Unlock your device to
+  /// continue" view immediately, one that touches nothing
+  /// Data-Protection-gated, in place of starting React Native at all —
+  /// then waiting on `protectedDataDidBecomeAvailableNotification` for as
+  /// long as it takes. That notification is the OS's own guarantee: it
+  /// fires whenever the user actually unlocks the device, which is the
+  /// only condition that ever makes this launch path relevant to begin
+  /// with (nobody sees this screen without eventually unlocking their
+  /// phone to do anything else with it either).
+  ///
+  /// The observer closure runs `queue: .main` — confirmed by reading the
+  /// call below, not assumed — so `factory.startReactNative()` is always
+  /// dispatched on the main thread regardless of which thread posts the
+  /// notification.
+  ///
   /// For a real, already-visible user launch, `isProtectedDataAvailable`
   /// is true essentially always — a device the user is actively looking
   /// at and interacting with has, in the overwhelming majority of real
-  /// usage, already been unlocked. This only meaningfully delays the
-  /// prewarm-while-locked case, not normal use.
+  /// usage, already been unlocked — so this fallback view is never seen
+  /// in normal use; it exists for the narrow window where it's actually
+  /// needed.
   ///
   /// **Unverified as of this writing** — see `docs/CRYPTO.md`'s device
   /// checklist, which now includes a background-prewarm-while-locked
@@ -87,6 +113,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       return
     }
 
+    showWaitingForUnlockScreen(in: window)
+
     protectedDataObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.protectedDataDidBecomeAvailableNotification,
       object: nil,
@@ -100,6 +128,33 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       self.hardenMmkvDirectory()
       factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
     }
+  }
+
+  /// A plain, static native view — no React Native, no MMKV, nothing
+  /// Data-Protection-gated — shown only while `startReactNativeWhenDataIsAvailable`
+  /// is waiting on a real unlock signal. Replaced automatically once
+  /// `factory.startReactNative()` runs and sets its own root view
+  /// controller on the same `window`.
+  private func showWaitingForUnlockScreen(in window: UIWindow) {
+    let viewController = UIViewController()
+    viewController.view.backgroundColor = .systemBackground
+
+    let label = UILabel()
+    label.text = "Unlock your device to continue."
+    label.textAlignment = .center
+    label.numberOfLines = 0
+    label.translatesAutoresizingMaskIntoConstraints = false
+    viewController.view.addSubview(label)
+
+    NSLayoutConstraint.activate([
+      label.centerXAnchor.constraint(equalTo: viewController.view.centerXAnchor),
+      label.centerYAnchor.constraint(equalTo: viewController.view.centerYAnchor),
+      label.leadingAnchor.constraint(greaterThanOrEqualTo: viewController.view.leadingAnchor, constant: 24),
+      label.trailingAnchor.constraint(lessThanOrEqualTo: viewController.view.trailingAnchor, constant: -24),
+    ])
+
+    window.rootViewController = viewController
+    window.makeKeyAndVisible()
   }
 
   /// react-native-mmkv stores both the vault and preferences instances
