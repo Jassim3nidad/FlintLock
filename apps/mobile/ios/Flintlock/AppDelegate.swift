@@ -17,12 +17,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// same reasoning as Android's FLAG_SECURE in MainActivity.kt).
   private var privacyOverlay: UIVisualEffectView?
 
+  /// Holds the observer registered in `startReactNativeWhenDataIsAvailable`
+  /// so it can be removed once it fires (or on a second launch call, which
+  /// shouldn't happen but shouldn't leak an observer if it somehow does).
+  private var protectedDataObserver: NSObjectProtocol?
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
-    hardenMmkvDirectory()
-
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
@@ -32,13 +35,71 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     window = UIWindow(frame: UIScreen.main.bounds)
 
-    factory.startReactNative(
-      withModuleName: "Flintlock",
-      in: window,
-      launchOptions: launchOptions
-    )
+    startReactNativeWhenDataIsAvailable(application, factory: factory, launchOptions: launchOptions)
 
     return true
+  }
+
+  /// Defers starting the JS bundle — and therefore MMKV's first,
+  /// storage-touching effects (`VaultSessionProvider`'s mount effect reads
+  /// vault storage almost immediately after the React tree renders) —
+  /// until iOS confirms Data-Protection-protected files are actually
+  /// readable.
+  ///
+  /// Without this, a background "prewarming" launch (iOS can start this
+  /// app with zero user interaction — launch-time-optimization prewarming,
+  /// silent push handling, background refresh — including while the
+  /// device has never been unlocked this boot) would call
+  /// `factory.startReactNative()` unconditionally, rendering the full
+  /// React tree and attempting to open the vault's MMKV file almost
+  /// immediately. Under `NSFileProtectionCompleteUnlessOpen` (see
+  /// `hardenMmkvDirectory()`), a *first* open while locked is denied —
+  /// and `react-native-mmkv`'s failure mode for a denied open is not
+  /// guaranteed to be a catchable JS exception; MMKV's native core has a
+  /// documented history of hard process aborts on iOS Data-Protection
+  /// open failures. Checking `isProtectedDataAvailable` means the risky
+  /// `mmap()` attempt never happens in the first place during exactly
+  /// that window, rather than depending on it failing gracefully after
+  /// the fact — which is the more robust half of this fix; the JS side
+  /// (`apps/mobile/src/storage/native.ts`) separately makes its own MMKV
+  /// access lazy and catches what *is* catchable, as defense in depth,
+  /// not as the primary guard.
+  ///
+  /// For a real, already-visible user launch, `isProtectedDataAvailable`
+  /// is true essentially always — a device the user is actively looking
+  /// at and interacting with has, in the overwhelming majority of real
+  /// usage, already been unlocked. This only meaningfully delays the
+  /// prewarm-while-locked case, not normal use.
+  ///
+  /// **Unverified as of this writing** — see `docs/CRYPTO.md`'s device
+  /// checklist, which now includes a background-prewarm-while-locked
+  /// case specifically for this.
+  private func startReactNativeWhenDataIsAvailable(
+    _ application: UIApplication,
+    factory: RCTReactNativeFactory,
+    launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+  ) {
+    guard let window = window else { return }
+
+    if application.isProtectedDataAvailable {
+      hardenMmkvDirectory()
+      factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
+      return
+    }
+
+    protectedDataObserver = NotificationCenter.default.addObserver(
+      forName: UIApplication.protectedDataDidBecomeAvailableNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      guard let self = self else { return }
+      if let observer = self.protectedDataObserver {
+        NotificationCenter.default.removeObserver(observer)
+        self.protectedDataObserver = nil
+      }
+      self.hardenMmkvDirectory()
+      factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
+    }
   }
 
   /// react-native-mmkv stores both the vault and preferences instances

@@ -8,7 +8,7 @@ There is no backend, no account, and no sync service. Vault data never leaves th
 
 - **Platform:** React Native (bare workflow), TypeScript. Android first, iOS second.
 - **Crypto:** [`react-native-quick-crypto`](https://github.com/margelo/react-native-quick-crypto) (JSI, native OpenSSL/BoringSSL-backed) for AES-256-GCM, PBKDF2-HMAC-SHA256, CSPRNG, and — via its own built-in Argon2 support — the proposed Argon2id upgrade path. No separate Argon2 library needed. See [docs/CRYPTO.md](docs/CRYPTO.md).
-- **Minimum OS:** Android 8.0 (API 26)+, iOS 15.0+.
+- **Minimum OS:** Android 7.0 (API 24)+, iOS 15.0+. API 24 is required for `setInvalidatedByBiometricEnrollment` (biometric re-enrollment invalidation, PROMPT.md §3.5); see `SECURITY.md`'s "Android biometric hardware floor" for what biometric unlock does and doesn't guarantee at that floor (StrongBox needs API 28+; fingerprint-only, no Face/Iris, below it).
 
 ## Prerequisites
 
