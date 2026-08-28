@@ -1,6 +1,27 @@
 module.exports = {
   root: true,
   extends: '@react-native',
+  rules: {
+    // VaultStore.unsafeDekForTests() exists only so a test can capture a
+    // DEK handle before lock() and assert its bytes are zeroed after --
+    // production code never needs the DEK itself, only what it can
+    // decrypt through getRecord/putRecord. Its name is a convention, not
+    // a boundary the compiler enforces (KeyHandle is a branded opaque
+    // type specifically to make that kind of boundary real everywhere
+    // else -- this method is the one deliberate hole in it, scoped to
+    // tests only by this rule, not by anything the type system stops on
+    // its own). See F4 in docs/AUDIT-2026-08-25.md for why this
+    // assertion needed to exist at all, and the packages/core copy of
+    // this same rule for the definition side.
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "CallExpression[callee.property.name='unsafeDekForTests']",
+        message:
+          'unsafeDekForTests() is test-only -- it hands out the live DEK handle, bypassing the KeyHandle opacity boundary everywhere else in this codebase. Only call it from a *.test.ts/*.test.tsx file.',
+      },
+    ],
+  },
   overrides: [
     {
       files: ['**/*.test.ts', '**/*.test.tsx'],
@@ -22,6 +43,10 @@ module.exports = {
         // callback instead, so act() itself always resolves -- see that
         // same test file's "a wrong password rejects and leaves the
         // session locked" for the corrected pattern.
+        //
+        // unsafeDekForTests() is deliberately absent from this override's
+        // selector list -- test files under *.test.ts/*.test.tsx are
+        // exactly where it's allowed, so no restriction on it applies here.
         'no-restricted-syntax': [
           'error',
           {

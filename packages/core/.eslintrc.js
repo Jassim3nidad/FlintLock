@@ -24,6 +24,32 @@ module.exports = {
         message:
           'Do not access `.buffer` in packages/core — it can expose a wider shared ArrayBuffer than the view itself covers. Use Buffer.from(view) (copies, always safe) instead.',
       },
+      {
+        selector: "CallExpression[callee.property.name='unsafeDekForTests']",
+        message:
+          "VaultStore.unsafeDekForTests() exists only so a test can capture a DEK handle before lock() and assert its bytes are zeroed after — production code never needs the DEK itself, only what it can decrypt through getRecord/putRecord. Its name is a convention, not a boundary the compiler enforces; this rule is the actual boundary. Only call it from a *.test.ts/*.test.tsx file.",
+      },
     ],
   },
+  overrides: [
+    {
+      // The one sanctioned caller of unsafeDekForTests(): a test that
+      // needs to assert a DEK was actually zeroed, not just that its
+      // reference became unreachable (see VaultStore.unsafeDekForTests()'s
+      // own doc comment, and F4 in docs/AUDIT-2026-08-25.md for the
+      // regression this exists to catch). The .buffer ban still applies
+      // here — that hazard doesn't become safe just because it's a test.
+      files: ['**/*.test.ts', '**/*.test.tsx'],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector: "MemberExpression[property.name='buffer'][computed=false]",
+            message:
+              'Do not access `.buffer` in packages/core — it can expose a wider shared ArrayBuffer than the view itself covers. Use Buffer.from(view) (copies, always safe) instead.',
+          },
+        ],
+      },
+    },
+  ],
 };
