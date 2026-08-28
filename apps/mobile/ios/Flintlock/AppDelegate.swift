@@ -22,6 +22,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// shouldn't happen but shouldn't leak an observer if it somehow does).
   private var protectedDataObserver: NSObjectProtocol?
 
+  /// Set once `attemptStartReactNative` actually starts the JS bundle, so
+  /// the two independent triggers that can call it (the notification and
+  /// `applicationDidBecomeActive`, see that method's doc comment for why
+  /// there are two) can't both fire it.
+  private var didStartReactNative = false
+
+  /// Non-nil only while waiting on `attemptStartReactNative` to succeed —
+  /// holds what that retry needs, since `applicationDidBecomeActive` is a
+  /// delegate callback with no parameters of its own to carry them in.
+  private var pendingReactNativeStart: (factory: RCTReactNativeFactory, launchOptions: [UIApplication.LaunchOptionsKey: Any]?)?
+
   func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -78,17 +89,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// guard) by showing a minimal *native* "Unlock your device to
   /// continue" view immediately, one that touches nothing
   /// Data-Protection-gated, in place of starting React Native at all —
-  /// then waiting on `protectedDataDidBecomeAvailableNotification` for as
-  /// long as it takes. That notification is the OS's own guarantee: it
-  /// fires whenever the user actually unlocks the device, which is the
-  /// only condition that ever makes this launch path relevant to begin
-  /// with (nobody sees this screen without eventually unlocking their
-  /// phone to do anything else with it either).
-  ///
-  /// The observer closure runs `queue: .main` — confirmed by reading the
-  /// call below, not assumed — so `factory.startReactNative()` is always
-  /// dispatched on the main thread regardless of which thread posts the
-  /// notification.
+  /// then retrying via two independent triggers (see
+  /// `attemptStartReactNative`'s doc comment for why there are two, not
+  /// one) until one of them succeeds.
   ///
   /// For a real, already-visible user launch, `isProtectedDataAvailable`
   /// is true essentially always — a device the user is actively looking
@@ -98,8 +101,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   /// needed.
   ///
   /// **Unverified as of this writing** — see `docs/CRYPTO.md`'s device
-  /// checklist, which now includes a background-prewarm-while-locked
-  /// case specifically for this.
+  /// checklist, which now includes both a background-prewarm-while-locked
+  /// case and a "was this property ever transiently false on an
+  /// already-unlocked device" case specifically for this.
   private func startReactNativeWhenDataIsAvailable(
     _ application: UIApplication,
     factory: RCTReactNativeFactory,
@@ -110,24 +114,71 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     if application.isProtectedDataAvailable {
       hardenMmkvDirectory()
       factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
+      didStartReactNative = true
       return
     }
 
     showWaitingForUnlockScreen(in: window)
+    pendingReactNativeStart = (factory, launchOptions)
 
+    // Trigger 1: the OS's own "data became available" signal. Correct for
+    // the genuine prewarm-while-locked case (this fires reliably once the
+    // user actually unlocks the device) but insufficient on its own — see
+    // attemptStartReactNative's doc comment.
     protectedDataObserver = NotificationCenter.default.addObserver(
       forName: UIApplication.protectedDataDidBecomeAvailableNotification,
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      guard let self = self else { return }
-      if let observer = self.protectedDataObserver {
-        NotificationCenter.default.removeObserver(observer)
-        self.protectedDataObserver = nil
-      }
-      self.hardenMmkvDirectory()
-      factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
+      self?.attemptStartReactNative()
     }
+  }
+
+  /// Two independent triggers call this, deliberately — one isn't enough:
+  ///
+  /// 1. `protectedDataDidBecomeAvailableNotification` (registered in
+  ///    `startReactNativeWhenDataIsAvailable`) fires on a **locked →
+  ///    unlocked transition**. That's exactly right for a genuine
+  ///    prewarm-while-locked launch — the user unlocking their device is
+  ///    the transition that fires it.
+  /// 2. `applicationDidBecomeActive` (below) fires on **every** foreground
+  ///    transition, regardless of whether a lock/unlock transition
+  ///    happened at all. This covers a different, real failure mode: if
+  ///    `isProtectedDataAvailable` were ever transiently `false` at
+  ///    `didFinishLaunchingWithOptions` time on a device that was already
+  ///    unlocked and *stays* unlocked (a stale read at the exact instant
+  ///    a newly-spawned process's launch callback runs, before the OS has
+  ///    finished associating it with the already-unlocked session — not
+  ///    confirmed to actually happen, but not ruled out either without a
+  ///    real device, and the failure mode if it does happen is severe: no
+  ///    lock→unlock transition would ever occur for trigger 1 to fire on,
+  ///    since the device was never locked to begin with, so the app would
+  ///    show "Unlock your device to continue" to a user on an
+  ///    already-unlocked phone, forever, with no path forward but a
+  ///    force-quit). `applicationDidBecomeActive` doesn't depend on a
+  ///    transition having a particular direction — it fires whenever this
+  ///    app becomes the foreground-active app, which happens shortly after
+  ///    a real launch regardless of which way `isProtectedDataAvailable`
+  ///    read a moment earlier, giving a second, differently-timed chance
+  ///    to notice data is actually available and recover without waiting
+  ///    on a transition that may never come.
+  ///
+  /// Idempotent via `didStartReactNative` — whichever trigger fires first
+  /// wins; the other becomes a no-op.
+  private func attemptStartReactNative() {
+    guard !didStartReactNative, let (factory, launchOptions) = pendingReactNativeStart else { return }
+    guard UIApplication.shared.isProtectedDataAvailable else { return }
+
+    if let observer = protectedDataObserver {
+      NotificationCenter.default.removeObserver(observer)
+      protectedDataObserver = nil
+    }
+    pendingReactNativeStart = nil
+    didStartReactNative = true
+
+    guard let window = window else { return }
+    hardenMmkvDirectory()
+    factory.startReactNative(withModuleName: "Flintlock", in: window, launchOptions: launchOptions)
   }
 
   /// A plain, static native view — no React Native, no MMKV, nothing
@@ -244,6 +295,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
   func applicationDidBecomeActive(_ application: UIApplication) {
     privacyOverlay?.removeFromSuperview()
     privacyOverlay = nil
+    // Trigger 2 of 2 for recovering from the waiting-for-unlock screen —
+    // see attemptStartReactNative's doc comment. A no-op whenever React
+    // Native already started (the overwhelming majority of launches).
+    attemptStartReactNative()
   }
 }
 
