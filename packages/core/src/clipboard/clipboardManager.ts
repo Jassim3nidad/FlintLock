@@ -61,6 +61,44 @@ export class ClipboardManager {
     return succeeded;
   }
 
+  /**
+   * Reads the clipboard back and, if it's not actually empty, retries the
+   * clear once — then reports failure via `onClearFailure()` only if it's
+   * *still* not empty after that.
+   *
+   * Exists specifically for the case `clear()`'s own return value can't
+   * catch: on Android 10+, a clear attempted while backgrounded (the
+   * usual case — locking via backgrounding is this app's default) can be
+   * silently denied by the OS with no error for `write()` to observe (see
+   * `ClipboardWriter.write()`'s doc comment). `write()` reporting success
+   * there is not evidence the clipboard is actually clear — only reading
+   * it back is. Call this once the app is confirmed foregrounded again
+   * (both the read and the retry write need focus to be meaningful; see
+   * `ClipboardWriter.read()`'s own doc comment), not on a timer and not
+   * speculatively while still backgrounded.
+   */
+  async verifyCleared(): Promise<boolean> {
+    const writer = getClipboardWriter();
+    const current = await writer.read();
+    if (current === '') return true;
+
+    const succeeded = await writer.write('');
+    if (!succeeded) {
+      this.notifyClearFailure();
+      return false;
+    }
+
+    // write() reporting success is trustworthy here specifically because
+    // we're foregrounded (confirmed by the caller) — but confirm anyway
+    // rather than assuming, for the same reason clear() alone isn't
+    // trusted: a report of success and an actually-empty clipboard are
+    // two different claims.
+    const after = await writer.read();
+    const cleared = after === '';
+    if (!cleared) this.notifyClearFailure();
+    return cleared;
+  }
+
   getSecondsRemaining(): number {
     return this.secondsRemaining;
   }

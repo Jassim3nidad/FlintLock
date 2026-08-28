@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { Buffer, getBiometricKeySource, KdfParams, UnlockSession, VaultStore } from '@flintlock/core';
+import { Buffer, ClipboardManager, getBiometricKeySource, KdfParams, SessionClipboardGuard, UnlockSession, VaultStore } from '@flintlock/core';
 
 interface VaultSessionContextValue {
   session: UnlockSession;
@@ -11,6 +11,23 @@ interface VaultSessionContextValue {
   unlockWithBiometrics: () => Promise<boolean>;
   lock: () => void;
   refreshVaultExists: () => Promise<void>;
+  /**
+   * The one ClipboardManager instance for the whole unlocked session —
+   * screens use this to copy values, never their own instance, so
+   * SessionClipboardGuard's session-scoped clear-on-lock (see that
+   * class's doc comment for the full three-leg design) actually covers
+   * whatever they copied.
+   */
+  clipboardManager: ClipboardManager;
+  /**
+   * True from the moment a lock-triggered clear is confirmed to have
+   * failed (checked on next foreground, never at lock time itself — see
+   * SessionClipboardGuard) until dismissed. Deliberately carries no
+   * information about *what* might still be on the clipboard — the
+   * warning exists to avoid a disclosure, not to become one.
+   */
+  isClipboardWarningActive: boolean;
+  dismissClipboardWarning: () => void;
 }
 
 const VaultSessionContext = createContext<VaultSessionContextValue | null>(null);
@@ -20,8 +37,13 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
   if (!sessionRef.current) sessionRef.current = new UnlockSession();
   const session = sessionRef.current;
 
+  const clipboardGuardRef = useRef<SessionClipboardGuard | null>(null);
+  if (!clipboardGuardRef.current) clipboardGuardRef.current = new SessionClipboardGuard(session);
+  const clipboardGuard = clipboardGuardRef.current;
+
   const [isUnlocked, setIsUnlocked] = useState(session.isUnlocked);
   const [vaultExists, setVaultExists] = useState(false);
+  const [isClipboardWarningActive, setIsClipboardWarningActive] = useState(clipboardGuard.isWarningActive);
 
   useEffect(() => {
     VaultStore.exists().then(setVaultExists);
@@ -33,13 +55,27 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
   }, [session]);
 
   useEffect(() => {
+    const unsubscribe = clipboardGuard.onWarningChange(setIsClipboardWarningActive);
+    return unsubscribe;
+  }, [clipboardGuard]);
+
+  useEffect(() => {
     const handleAppStateChange = (status: AppStateStatus): void => {
-      if (status === 'background') session.handleAppBackgrounded();
-      else if (status === 'active') session.handleAppForegrounded();
+      if (status === 'background') {
+        session.handleAppBackgrounded();
+      } else if (status === 'active') {
+        session.handleAppForegrounded();
+        // After session foregrounding, per SessionClipboardGuard's own
+        // doc comment on ordering: a clear attempted while backgrounded
+        // (this app's default lock trigger) can't be trusted without a
+        // read-back, and that read-back only means anything once focus
+        // is actually back.
+        clipboardGuard.handleForeground().catch(() => {});
+      }
     };
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
-  }, [session]);
+  }, [session, clipboardGuard]);
 
   /**
    * Unmounting this provider drops React's *reference* to `session`, but
@@ -57,8 +93,9 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
   useEffect(() => {
     return () => {
       session.lock();
+      clipboardGuard.dispose();
     };
-  }, [session]);
+  }, [session, clipboardGuard]);
 
   const value = useMemo<VaultSessionContextValue>(
     () => ({
@@ -84,8 +121,11 @@ export function VaultSessionProvider({ children }: { children: React.ReactNode }
         return true;
       },
       lock: () => session.lock(),
+      clipboardManager: clipboardGuard.clipboardManager,
+      isClipboardWarningActive,
+      dismissClipboardWarning: () => clipboardGuard.dismissWarning(),
     }),
-    [session, isUnlocked, vaultExists]
+    [session, isUnlocked, vaultExists, clipboardGuard, isClipboardWarningActive]
   );
 
   return <VaultSessionContext.Provider value={value}>{children}</VaultSessionContext.Provider>;

@@ -119,6 +119,73 @@ describe('ClipboardManager.clear', () => {
   });
 });
 
+describe('ClipboardManager.verifyCleared', () => {
+  it('returns true without retrying when the clipboard already reads empty', async () => {
+    const manager = new ClipboardManager(30);
+    expect(await manager.verifyCleared()).toBe(true);
+    expect(platform.clipboard.writes).toEqual([]);
+  });
+
+  it('retries and succeeds when a prior write silently failed — the Android background-denial case', async () => {
+    const manager = new ClipboardManager(30);
+
+    // copy() itself must actually land, unaffected by the flag — only
+    // the *next* flagged write is silently denied, and that needs to be
+    // clear()'s write, not copy()'s.
+    await manager.copy('hunter2');
+
+    // Simulate clear() being called while backgrounded: the platform
+    // silently denies the write, so the tracked value never actually
+    // changes, exactly like Android 10+'s focus-gated denial.
+    platform.clipboard.silentlyDenyNextWrite = true;
+    await manager.clear();
+    expect(await platform.clipboard.read()).toBe('hunter2'); // clear() believed it worked; it didn't
+
+    let failureFired = false;
+    manager.onClearFailure(() => {
+      failureFired = true;
+    });
+
+    const cleared = await manager.verifyCleared();
+
+    expect(cleared).toBe(true);
+    expect(await platform.clipboard.read()).toBe('');
+    expect(failureFired).toBe(false);
+  });
+
+  it('reports failure via onClearFailure when the retry write itself fails', async () => {
+    const manager = new ClipboardManager(30);
+    await manager.copy('hunter2');
+
+    platform.clipboard.failNextWrite = true;
+    let failureFired = false;
+    manager.onClearFailure(() => {
+      failureFired = true;
+    });
+
+    expect(await manager.verifyCleared()).toBe(false);
+    expect(failureFired).toBe(true);
+  });
+
+  it('reports failure when the retry write reports success but the read-back still shows content', async () => {
+    const manager = new ClipboardManager(30);
+    await manager.copy('hunter2');
+
+    // The retry write() itself is silently denied too — modeling a
+    // sustained background-focus denial across both the original clear
+    // and the verification retry.
+    platform.clipboard.silentlyDenyNextWrite = true;
+    let failureFired = false;
+    manager.onClearFailure(() => {
+      failureFired = true;
+    });
+
+    expect(await manager.verifyCleared()).toBe(false);
+    expect(await platform.clipboard.read()).toBe('hunter2');
+    expect(failureFired).toBe(true);
+  });
+});
+
 describe('ClipboardManager.onTick', () => {
   it('notifies listeners on copy, each tick, and clear', async () => {
     const manager = new ClipboardManager(2);

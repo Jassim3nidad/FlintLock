@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -7,15 +7,7 @@ import { Button } from '../components/Button';
 import { TotpCodeDisplay } from '../components/TotpCodeDisplay';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import {
-  ClipboardManager,
-  Credential,
-  getCredential,
-  getTotpEntriesForCredential,
-  hardDeleteCredential,
-  softDeleteCredential,
-  TotpEntry,
-} from '@flintlock/core';
+import { Credential, getCredential, getTotpEntriesForCredential, hardDeleteCredential, softDeleteCredential, TotpEntry } from '@flintlock/core';
 import type { MainStackParamList } from '../navigation/types';
 
 type Route = NativeStackScreenProps<MainStackParamList, 'CredentialDetail'>['route'];
@@ -43,14 +35,11 @@ export function CredentialDetailScreen() {
   const theme = useTheme();
   const navigation = useNavigation<Nav>();
   const route = useRoute<Route>();
-  const { session } = useVaultSession();
+  const { session, clipboardManager } = useVaultSession();
 
   const [loaded, setLoaded] = useState(false);
   const [credential, setCredential] = useState<Credential | undefined>(undefined);
   const [totpEntries, setTotpEntries] = useState<TotpEntry[]>([]);
-
-  const clipboardRef = useRef<ClipboardManager>(undefined);
-  if (!clipboardRef.current) clipboardRef.current = new ClipboardManager();
   const [copyCountdown, setCopyCountdown] = useState<number | null>(null);
 
   useFocusEffect(
@@ -69,16 +58,14 @@ export function CredentialDetailScreen() {
     }, [session, route.params.credentialId])
   );
 
+  // clear-on-lock is now session-scoped (SessionClipboardGuard, wired in
+  // VaultSessionProvider) rather than tied to this screen's mount
+  // lifecycle — this only tracks the countdown display, which is
+  // legitimately screen-specific UI.
   useEffect(() => {
-    const unsubscribeTick = clipboardRef.current!.onTick((seconds) => setCopyCountdown(seconds > 0 ? seconds : null));
-    const unsubscribeLock = session.onLock(() => {
-      clipboardRef.current!.clear().catch(() => {});
-    });
-    return () => {
-      unsubscribeTick();
-      unsubscribeLock();
-    };
-  }, [session]);
+    const unsubscribeTick = clipboardManager.onTick((seconds) => setCopyCountdown(seconds > 0 ? seconds : null));
+    return unsubscribeTick;
+  }, [clipboardManager]);
 
   if (!loaded) return null;
 
@@ -93,7 +80,7 @@ export function CredentialDetailScreen() {
   }
 
   const handleCopyValue = (value: string): void => {
-    clipboardRef.current!.copy(value).catch(() => {});
+    clipboardManager.copy(value).catch(() => {});
   };
   const handleCopy = (value: string) => (): void => handleCopyValue(value);
 
