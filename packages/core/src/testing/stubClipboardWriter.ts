@@ -15,6 +15,17 @@ export interface StubClipboardWriter extends ClipboardWriter {
    * can catch.
    */
   silentlyDenyNextWrite: boolean;
+  /**
+   * When set, the next read() resolves `''` regardless of the actual
+   * tracked content — simulating a real read denial (Android's clipboard
+   * focus-gating covers get, not just set) landing at the exact moment
+   * `SessionClipboardGuard.verifyCleared()` checks, before focus has
+   * genuinely returned. Distinct from a real empty clipboard: `current`
+   * itself is untouched, so the read immediately after this one (or a
+   * direct read via the test's own `platform.clipboard.read()`) sees the
+   * real value again.
+   */
+  denyNextRead: boolean;
 }
 
 export function createStubClipboardWriter(): StubClipboardWriter {
@@ -23,6 +34,7 @@ export function createStubClipboardWriter(): StubClipboardWriter {
     writes: [],
     failNextWrite: false,
     silentlyDenyNextWrite: false,
+    denyNextRead: false,
     async write(value) {
       writer.writes.push(value);
       if (writer.failNextWrite) {
@@ -37,6 +49,10 @@ export function createStubClipboardWriter(): StubClipboardWriter {
       return true;
     },
     async read() {
+      if (writer.denyNextRead) {
+        writer.denyNextRead = false;
+        return '';
+      }
       return current;
     },
   };

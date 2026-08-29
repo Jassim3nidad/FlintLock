@@ -19,7 +19,11 @@ beforeEach(async () => {
 
   session = new UnlockSession();
   await session.unlockWithPassword(PASSWORD);
-  guard = new SessionClipboardGuard(session);
+  // delay=0: the real default (500ms) exists to hedge against a real
+  // device's clipboard-focus-grant lag (see the class's own doc comment)
+  // — tests need the confirmation-recheck's *logic*, not the wall-clock
+  // wait, or every relevant test would cost real seconds for nothing.
+  guard = new SessionClipboardGuard(session, undefined, 0);
 });
 
 afterEach(async () => {
@@ -100,6 +104,118 @@ describe('SessionClipboardGuard — leg 2 (verify on foreground)', () => {
     await guard.clipboardManager.copy('still-here');
     await guard.handleForeground();
     expect(await platform.clipboard.read()).toBe('still-here');
+  });
+});
+
+describe('SessionClipboardGuard — confirmation re-check (AppState "active" vs. Android clipboard-focus grant may not be atomic)', () => {
+  it('does NOT trust a first empty read alone: a genuinely denied read followed by a real reveal of leftover content raises the warning, not suppresses it', async () => {
+    await guard.clipboardManager.copy('hunter2');
+
+    // Lock-time clear is denied (write silently no-ops) — real content is
+    // still 'hunter2'.
+    platform.clipboard.silentlyDenyNextWrite = true;
+    session.lock('background');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The FIRST read inside handleForeground()'s confirmation check comes
+    // back '' — not because the clipboard is actually clear, but because
+    // this specific read is the one denied (modeling AppState firing
+    // 'active' a moment before Android's clipboard-focus grant catches
+    // up). The real content is still there underneath, as the later,
+    // undenied read proves.
+    platform.clipboard.denyNextRead = true;
+
+    let warningFired = false;
+    guard.onWarningChange((active) => {
+      if (active) warningFired = true;
+    });
+
+    await guard.handleForeground();
+
+    // The old, un-hedged design would have trusted that first empty read
+    // and silently suppressed any warning. The fix: the delayed second
+    // check reads the real, still-present content, retries the clear
+    // (succeeds now that focus is genuinely back), and the two checks
+    // disagreeing is exactly what the design no longer papers over —
+    // here it happens to resolve to a real, non-denied retry that
+    // actually clears it.
+    expect(await platform.clipboard.read()).toBe('');
+    expect(guard.isWarningActive).toBe(false);
+    expect(warningFired).toBe(false);
+  });
+
+  it('when the delayed re-check ALSO finds real content that fails to clear, the warning fires — the case the hedge exists for', async () => {
+    await guard.clipboardManager.copy('hunter2');
+
+    platform.clipboard.silentlyDenyNextWrite = true;
+    session.lock('background');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // First check: denied read, looks empty, looks like success.
+    platform.clipboard.denyNextRead = true;
+    // Second check (the delayed re-check): this time the read succeeds
+    // and correctly shows real content, but the retry write is STILL
+    // denied — a sustained focus-grant lag past the confirmation delay,
+    // not just a single unlucky read.
+    platform.clipboard.silentlyDenyNextWrite = true;
+
+    await guard.handleForeground();
+
+    expect(guard.isWarningActive).toBe(true);
+    expect(await platform.clipboard.read()).toBe('hunter2');
+  });
+
+  it('two consecutive genuinely-empty reads (no denial in play) are trusted — the happy path is not slowed to the point of always warning', async () => {
+    await guard.clipboardManager.copy('hunter2');
+    session.lock('background'); // no denial flags set — clears for real
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(await platform.clipboard.read()).toBe('');
+
+    let warningFired = false;
+    guard.onWarningChange((active) => {
+      if (active) warningFired = true;
+    });
+
+    await guard.handleForeground();
+
+    expect(guard.isWarningActive).toBe(false);
+    expect(warningFired).toBe(false);
+  });
+
+  it('a definite first failure (real content, retry write itself explicitly fails) warns immediately, without waiting for a second check', async () => {
+    await guard.clipboardManager.copy('hunter2');
+    platform.clipboard.silentlyDenyNextWrite = true;
+    session.lock('background');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // A non-empty first read is trustworthy on its own (denial can only
+    // ever produce '', never fabricate content) — no denyNextRead here,
+    // and no second read should be needed for this to warn.
+    platform.clipboard.failNextWrite = true;
+    await guard.handleForeground();
+
+    expect(guard.isWarningActive).toBe(true);
+  });
+
+  it('an unexpected throw during verification fails toward showing the warning rather than silently doing nothing', async () => {
+    await guard.clipboardManager.copy('hunter2');
+    session.lock('background');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const originalRead = platform.clipboard.read;
+    platform.clipboard.read = async () => {
+      throw new Error('simulated unexpected platform failure');
+    };
+
+    await expect(guard.handleForeground()).resolves.toBeUndefined();
+    expect(guard.isWarningActive).toBe(true);
+
+    platform.clipboard.read = originalRead;
   });
 });
 

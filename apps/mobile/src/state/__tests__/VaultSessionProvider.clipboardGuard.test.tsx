@@ -86,6 +86,16 @@ async function fireAppStateChange(status: 'active' | 'background') {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    if (status === 'active') {
+      // SessionClipboardGuard.handleForeground() doesn't trust a first
+      // "cleared" read alone — it re-checks once more after a real
+      // foregroundConfirmationDelayMs (500ms default here, since
+      // VaultSessionProvider constructs the guard with no override — see
+      // that class's own doc comment on why). Flushing microtasks can't
+      // span a real macrotask delay, so wait past it too. A no-op wait
+      // when pendingVerification was never set (nothing scheduled).
+      await new Promise((resolve) => setTimeout(resolve, 650));
+    }
   });
 }
 
@@ -130,29 +140,31 @@ describe('VaultSessionProvider + SessionClipboardGuard — real AppState wiring'
 
   /**
    * NOT a demonstration that the warning leg works — the opposite. This
-   * documents a real gap found while writing this test, not something
+   * documents the residual limit of `SessionClipboardGuard`'s foreground
+   * confirmation re-check (see that class's doc comment), not something
    * being asserted as correct or desired: see docs/AUDIT-2026-08-25.md's
    * F2 write-up for the full explanation and the question left open for
    * the user (whether this race is reachable on real hardware at all,
-   * and if so, whether it's worth closing).
+   * and if so, whether it's worth closing further).
    *
    * `ClipboardManager.verifyCleared()` treats `read() === ''` as proof
-   * the clipboard is empty. But `read()` is focus-gated the same way
+   * the clipboard is empty. `read()` is focus-gated the same way
    * `write()` is (see clipboard/__mocks__/native.ts and Android's actual
-   * documented 10+ restriction, which covers both get and set) — so a
+   * documented 10+ restriction, which covers both get and set), so a
    * `read()` performed before clipboard focus has genuinely returned
    * cannot tell "actually empty" apart from "denied, reports empty
-   * either way." If `handleForeground()` ever runs at a moment when
-   * RN's AppState has already fired 'active' but the OS hasn't yet
-   * restored clipboard focus specifically, `verifyCleared()` silently
-   * reports success — no retry attempted, no warning raised — while the
-   * real clipboard content is untouched.  Whether that moment can occur
-   * in practice depends on whether AppState's 'active' and Android's
-   * clipboard-focus grant are always atomic (same underlying focused-
-   * window signal) or can be observed to desync — unconfirmed here,
-   * flagged for real-device verification.
+   * either way." `handleForeground()` no longer trusts a single such
+   * read (it re-checks once more after a real delay — see
+   * 'a transient focus-grant lag is exactly what the confirmation
+   * re-check exists for' below, where that mitigation succeeds) — but
+   * that mitigation is bounded: this test models focus staying denied
+   * for the *entire* window, including past the delayed re-check, so
+   * both checks come back empty and the false negative still reproduces.
+   * Whether real hardware can plausibly stay denied that long, or the
+   * lag is always much shorter, is unconfirmed — flagged for real-
+   * device verification, not guessed at.
    */
-  it('surfaces a gap: if the read-gate is still denied at the moment of verification, the warning does NOT fire even though the clipboard was never actually cleared', async () => {
+  it('surfaces the confirmation re-check\'s residual limit: sustained denial through the whole window still produces no warning', async () => {
     await renderCapture();
     await act(async () => {
       await capturedCtx!.createVault(Buffer.from('correct horse'), FAST_KDF);
@@ -186,6 +198,36 @@ describe('VaultSessionProvider + SessionClipboardGuard — real AppState wiring'
     await fireAppStateChange('active');
     expect(capturedCtx!.isClipboardWarningActive).toBe(false);
     expect(mockClipboardNative.__peek()).toBe('hunter2'); // still sitting there, unwarned
+  });
+
+  it("a transient focus-grant lag is exactly what the confirmation re-check exists for: focus restores mid-delay, and the retry recovers silently instead of falsely reporting cleared", async () => {
+    await renderCapture();
+    await act(async () => {
+      await capturedCtx!.createVault(Buffer.from('correct horse'), FAST_KDF);
+    });
+
+    await act(async () => {
+      await capturedCtx!.clipboardManager.copy('hunter2');
+    });
+
+    mockClipboardNative.__setFocused(false);
+    await fireAppStateChange('background');
+    expect(mockClipboardNative.__peek()).toBe('hunter2');
+
+    // Focus is still denied at the exact moment AppState fires 'active'
+    // (so the guard's first check reads '' and can't trust it alone),
+    // but genuinely restores 200ms later — well inside the 500ms
+    // confirmation delay `fireAppStateChange`'s real wait already spans.
+    // This is the case the fix exists for: real hardware might plausibly
+    // restore clipboard focus within a few hundred ms of 'active' (an
+    // animation finishing, a dialog dismissing), even if it can't do so
+    // instantly.
+    mockClipboardNative.__setFocusedAfter(200, true);
+    await fireAppStateChange('active');
+
+    expect(mockClipboardNative.__peek()).toBe('');
+    expect(screen.getByTestId('warning')).toHaveTextContent('no-warning');
+    expect(capturedCtx!.isClipboardWarningActive).toBe(false);
   });
 
   it('an ordinary foreground with no prior lock does not touch a clipboard value that is still legitimately within its 30s window', async () => {

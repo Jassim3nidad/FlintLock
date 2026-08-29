@@ -24,6 +24,22 @@ export function __setFocused(isFocused: boolean): void {
   focused = isFocused;
 }
 
+/**
+ * Schedules a focus change after a real delay, instead of immediately —
+ * for modeling the specific race `SessionClipboardGuard`'s foreground
+ * confirmation re-check hedges against: RN's `AppState` 'active' event
+ * and Android's clipboard-focus grant are not the same signal, and the
+ * latter can lag the former (a lock-screen dismissal animation, a
+ * permission dialog still holding focus). `__setFocused(true)` called
+ * synchronously before firing 'active' can't represent that lag at all;
+ * this can.
+ */
+export function __setFocusedAfter(ms: number, isFocused: boolean): void {
+  setTimeout(() => {
+    focused = isFocused;
+  }, ms);
+}
+
 export function __reset(): void {
   value = '';
   focused = true;

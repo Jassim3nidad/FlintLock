@@ -76,6 +76,13 @@ export class ClipboardManager {
    * (both the read and the retry write need focus to be meaningful; see
    * `ClipboardWriter.read()`'s own doc comment), not on a timer and not
    * speculatively while still backgrounded.
+   *
+   * `read()` here is used only to compare against `''` — the value it
+   * returns is never stored on `this` or anywhere else, logged, or
+   * returned to the caller; it's a local binding that goes out of scope
+   * the moment the comparison is made. This method exists to check
+   * whether the clipboard still holds *something*, not to know or repeat
+   * what.
    */
   async verifyCleared(): Promise<boolean> {
     const writer = getClipboardWriter();
