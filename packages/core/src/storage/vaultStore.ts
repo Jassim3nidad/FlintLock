@@ -95,6 +95,23 @@ export class VaultStore {
     return (await readHeader())?.settings;
   }
 
+  /**
+   * Patches settings without deriving any key or unlocking anything — the
+   * write-side counterpart to peekSettings(), same rationale. For the one
+   * case that needs it: a biometric-unlock attempt failing specifically
+   * because the OS invalidated the enrolled key (re-enrollment changed
+   * which biometrics are trusted) happens *before* any DEK is available —
+   * `UnlockSession.vault` isn't reachable yet — but the vault is still
+   * visibly offering a biometric-unlock button that can now never work,
+   * and `biometricUnlockEnabled` needs to flip back to false so it stops
+   * offering one. No-ops if no vault exists (nothing to patch).
+   */
+  static async updateSettingsWithoutUnlock(settings: Partial<VaultHeader['settings']>): Promise<void> {
+    const header = await readHeader();
+    if (!header) return;
+    await writeHeader({ ...header, settings: { ...header.settings, ...settings } });
+  }
+
   /** Creates a brand-new, empty vault. Throws if one already exists on this device. */
   static async create(masterPassword: Buffer, kdfParams: KdfParams = DEFAULT_PBKDF2_PARAMS): Promise<VaultStore> {
     if (await VaultStore.exists()) {

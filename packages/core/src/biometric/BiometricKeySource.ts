@@ -22,6 +22,27 @@ import { KeyHandle } from '../crypto/CryptoProvider';
  */
 export type BiometricStrength = 'hardware' | 'prf' | 'largeblob' | 'unsupported';
 
+/**
+ * Thrown by `unlock()`, and only by `unlock()`, when the platform reports
+ * — as distinctly as it's able to — that the enrolled biometric-gated
+ * key is permanently dead, not that this particular prompt attempt
+ * failed. The two need different handling: a declined prompt or a
+ * misread fingerprint is retry-eligible and doesn't mean anything is
+ * wrong (`unlock()` still just returns `null` for that); this means the
+ * key can *never* succeed again until re-enrolled, so a caller catching
+ * this should stop offering the biometric-unlock button rather than let
+ * the user keep tapping something that can't work — see
+ * nativeBiometricKeySource.ts's own doc comment for exactly what signal
+ * this is keyed off on each platform, including where that signal is an
+ * imprecise heuristic rather than an exact one.
+ */
+export class BiometricKeyInvalidatedError extends Error {
+  constructor(message = 'The enrolled biometric key has been invalidated and can no longer be used') {
+    super(message);
+    this.name = 'BiometricKeyInvalidatedError';
+  }
+}
+
 export interface BiometricKeySource {
   /**
    * The single source of truth for both "is this available" and "how
@@ -43,7 +64,13 @@ export interface BiometricKeySource {
    */
   enroll(dek: KeyHandle): Promise<void>;
 
-  /** Prompts biometric auth; resolves the DEK on success, null on cancel/failure/no-enrollment. */
+  /**
+   * Prompts biometric auth; resolves the DEK on success, null on
+   * cancel/failure/no-enrollment. Throws `BiometricKeyInvalidatedError`
+   * specifically (never a different error type) if the platform reports
+   * the enrolled key itself is permanently invalidated — see that
+   * class's doc comment for why that case can't just return null too.
+   */
   unlock(): Promise<KeyHandle | null>;
 
   /** Master password remains the only way back in afterward, same as before enrollment. */

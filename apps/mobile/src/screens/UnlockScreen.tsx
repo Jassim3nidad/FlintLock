@@ -5,7 +5,7 @@ import { TextField } from '../components/TextField';
 import { Button } from '../components/Button';
 import { useTheme } from '../theme/ThemeProvider';
 import { useVaultSession } from '../state/VaultSessionProvider';
-import { Buffer, DecryptionError, getBiometricKeySource, VaultStore } from '@flintlock/core';
+import { BiometricKeyInvalidatedError, Buffer, DecryptionError, getBiometricKeySource, VaultStore } from '@flintlock/core';
 
 export function UnlockScreen() {
   const theme = useTheme();
@@ -50,8 +50,22 @@ export function UnlockScreen() {
     try {
       const succeeded = await unlockWithBiometrics();
       if (!succeeded) setError('Biometric unlock was cancelled or failed. Use your master password instead.');
-    } catch {
-      setError('Biometric unlock failed. Use your master password instead.');
+    } catch (e) {
+      if (e instanceof BiometricKeyInvalidatedError) {
+        // The enrolled key is permanently dead (most likely a new
+        // biometric enrollment on the device since it was set up) — not
+        // a retry-eligible prompt failure. nativeBiometricKeySource.unlock()
+        // already removed the stale Keychain entry itself; this is the
+        // other half only a screen with vault-header access can do:
+        // stop offering a button that can now never work. Uses
+        // updateSettingsWithoutUnlock() rather than session.vault, since
+        // the vault is still locked here — biometric unlock just failed.
+        await VaultStore.updateSettingsWithoutUnlock({ biometricUnlockEnabled: false }).catch(() => {});
+        setShowBiometricButton(false);
+        setError('Your biometric enrollment changed, so biometric unlock was turned off. Use your master password instead.');
+      } else {
+        setError('Biometric unlock failed. Use your master password instead.');
+      }
     } finally {
       setSubmitting(false);
     }
